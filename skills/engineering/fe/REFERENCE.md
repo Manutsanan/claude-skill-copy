@@ -105,3 +105,100 @@ React patterns (ใช้เมื่อ project เป็น React/Next — ไ
 - **memoization** — ใส่ `useMemo`/`useCallback` เมื่อ profile แล้ว slow หรือเป็น dep ของ effect เท่านั้น
 - **lift state up** — ลอง lift ไป common parent ก่อนใช้ context/store
 - **server vs client component** (Next.js App Router) — default server; `'use client'` เฉพาะที่ต้อง interactivity
+
+---
+
+## #nuxt-directory
+
+Path ของ Nuxt 4 (มี `app/` prefix) — ถ้า Nuxt 3 classic ตัด `app/` ออก:
+
+| Dir (v4) | Dir (v3 classic) | Purpose | Auto |
+|---|---|---|---|
+| `app/pages/` | `pages/` | file-based routing | route auto |
+| `app/layouts/` | `layouts/` | shared shell | `definePageMeta({ layout })` |
+| `app/components/` | `components/` | components | auto-import (PascalCase, nested = prefix) |
+| `app/composables/` | `composables/` | `use*` functions | auto-import |
+| `app/middleware/` | `middleware/` | route guards | named or `.global.ts` |
+| `app/plugins/` | `plugins/` | runtime plugin | `.client.ts`/`.server.ts` ต่อท้าย |
+| `app/utils/` | `utils/` | pure helper | auto-import |
+| `app/assets/` | `assets/` | bundled assets (SCSS, fonts) | import path |
+| `public/` | `public/` | static (served at `/`) | URL `/foo.png` |
+| `server/api/` | `server/api/` | API routes | auto `/api/*` |
+| `server/routes/` | `server/routes/` | non-`/api` server routes | auto |
+| `server/middleware/` | `server/middleware/` | server-side middleware | auto run ทุก request |
+| `shared/` | `shared/` (v3.10+) | type/util client+server | import via `#shared` |
+
+---
+
+## #nuxt-auto-imports
+
+**ห้ามเขียน import** สิ่งเหล่านี้ (auto):
+- Vue: `ref`, `reactive`, `computed`, `watch`, `watchEffect`, `onMounted`, `onUnmounted`, `nextTick`, `shallowRef`, `triggerRef`
+- Nuxt: `useState`, `useFetch`, `useAsyncData`, `useRoute`, `useRouter`, `useRuntimeConfig`, `useCookie`, `useHead`, `useSeoMeta`, `navigateTo`, `createError`, `defineNuxtConfig`, `defineNuxtPlugin`, `defineEventHandler`, `defineNuxtRouteMiddleware`
+- Component ใน components dir — ใช้ tag ตรงๆ (PascalCase) ใน template
+- Composable ใน composables dir — เรียกตรงๆ
+- Util ใน utils dir — เรียกตรงๆ
+
+**Type imports:** `import type { Foo } from '#shared/types'`
+
+---
+
+## #nuxt-state
+
+- **`useState(key, init)`** — SSR-safe shared ref. ตัวเลือกแรกสำหรับ shared business state. **key ต้อง unique ทั่วแอป** (ชนกัน = ค่ากระโดด). `init` เป็น function (กัน serialize on SSR)
+- **`useState` vs Pinia** — `useState` พอ 80%; ใช้ Pinia เมื่อ (1) ต้อง persist (`pinia-plugin-persistedstate`), (2) action/getter ซับซ้อน, (3) state graph ใหญ่ที่ต้อง devtools tracing
+- **localStorage** — wrap `import.meta.client` เสมอ; ห้ามอ่าน `localStorage` ตอน SSR
+
+---
+
+## #nuxt-data-fetching
+
+- **`useFetch(url)`** — wrapper บน `useAsyncData` + `$fetch` (URL เป็น key auto)
+- **`useAsyncData(key, fn)`** — logic ซับซ้อนกว่า fetch URL เดียว
+- **`$fetch(url)`** — imperative (event handler, server route) — **ไม่** SSR-cache, ไม่ dedupe
+- **`server: false`** — เลี่ยง SSR fetch (data ต้อง auth client-side)
+- **`lazy: true`** — ไม่ block navigation, render UI ก่อน data
+- **`watch: [refs]`** — refetch เมื่อ ref เปลี่ยน
+- **Error:** `const { data, error, status, refresh } = await useFetch(...)`; status: `'idle' | 'pending' | 'success' | 'error'`
+
+**v3 vs v4 — `data` reactivity:**
+- **Nuxt 3 classic:** `data` = **deep reactive** ref — mutate field ลึก trigger re-render
+- **Nuxt 4 (หรือ v3 + `compatibilityVersion: 4`):** `data` = **shallow ref** — mutate ลึก **ไม่** trigger; ต้อง assign object ใหม่ (`data.value = { ...data.value, user: { ...data.value.user, name: 'X' } }`)
+- Deep ใน v4 → pass `{ deep: true }` เข้า options
+- Pattern เก่า `data.value.someField = x` ใน v3 → เขียนใหม่ใน v4 หรือ opt-in
+
+---
+
+## #nuxt-routing
+
+- **Dynamic:** `pages/counter/[id].vue` → `useRoute().params.id`
+- **Catch-all:** `[...slug].vue` → array of segments
+- **`navigateTo(path)`** — ใช้แทน `router.push` (SSR redirect: `{ redirectCode: 302 }`)
+- **`definePageMeta({ middleware: 'auth', layout: 'admin' })`** — page-level config
+- **Middleware:** `defineNuxtRouteMiddleware((to, from) => { ... })` — return `navigateTo()` / `abortNavigation()` / `undefined`
+
+---
+
+## #nuxt-server
+
+- **File-based:** `server/api/users/[id].get.ts` → `GET /api/users/:id`
+- **`defineEventHandler(async (event) => { ... })`**
+- **body:** `await readBody(event)` (POST/PUT/PATCH)
+- **query:** `getQuery(event)`
+- **param:** `getRouterParam(event, 'id')`
+- **throw:** `throw createError({ statusCode: 400, statusMessage: 'ข้อความไทย' })`
+- **runtime config:** `useRuntimeConfig()` (server มี private + public; client เห็นแค่ `public`)
+
+---
+
+## #nuxt-ssr
+
+- ห้ามเรียก `window`, `document`, `localStorage`, `navigator` ตอน setup โดยไม่ guard
+- ใช้ `import.meta.client` / `import.meta.server` (Nuxt 3.10+) แทน `process.client`
+- `<ClientOnly>` wrap ส่วน render เฉพาะ client (gauge, chart)
+- `onMounted()` รันเฉพาะ client เสมอ — logic ที่ต้องการ DOM
+- date/time/random ที่ต่างระหว่าง server กับ client → คำนวณใน `onMounted` หรือ `<ClientOnly>`
+
+**SEO/head:**
+- `useSeoMeta({ title, description, ogImage })` — type-safe กว่า `useHead`
+- `useHead({ link, script })` — สำหรับ tag อื่น

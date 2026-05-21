@@ -3,372 +3,233 @@ name: ux
 description: ALWAYS use for ANY task involving website/app design, UI changes, or visual appearance — designing new components, building/editing pages, styling, layout, colors, spacing, animations, responsive breakpoints, accessibility, mockup-to-code, redesigns, polish work, or any request to "make it look better/nicer/modern". Trigger on Thai keywords ออกแบบ/ดีไซน์/ปรับหน้าตา/ปรับ UI/แต่ง UI/ทำให้สวย/ทำให้ดูดี/ทันสมัย/responsive/หน้าจอ/หน้าเว็บ/component/ปุ่ม/สี/layout/animation/ลูกเล่น and English keywords design/redesign/restyle/UI/UX/style/styling/layout/look/appearance/visual/component/page/screen/responsive/mobile/tablet/desktop/animation/transition/polish/modern/aesthetic/Tailwind/CSS. Use proactively WITHOUT being asked whenever editing .vue/.tsx/.jsx/.html/.css files for visual changes, or when user mentions wanting things to look different/better/modern/responsive. Examples: "ปรับ UI ให้สวย", "ทำหน้านี้ใหม่", "redesign this page", "review accessibility", "implement this mockup", "improve UX", "เพิ่ม animation", "ทำให้ responsive", "ปรับสี", "จัด layout".
 ---
 
-# UX
+# ux — Visual / Interaction Design
 
-ครอบคลุม 3 mode — เลือกใช้ตาม intent ของผู้ใช้:
+3 modes (เลือกตาม intent):
 
-1. **Design จาก spec/mockup** → ผู้ใช้ส่ง mockup, รูป, หรือ description
-2. **Review UI ที่มีอยู่** → ผู้ใช้ขอตรวจ / วิเคราะห์ / หา issue
-3. **Improve UX** → ผู้ใช้ขอปรับให้ดีขึ้น โดยไม่ได้ระบุปัญหาเจาะจง
-
-## Phase 0 — Load memory hierarchy (mandatory — extend Universal Phase 0)
-
-ลำดับ:
-
-1. **Load global memory** — `~/.claude/memory/MEMORY.md`
-   - filter: `metadata.skill: ux` หรือ `skill: cross`
-   - filter ต่อด้วย keyword: component, page, theme, animation, responsive, a11y
-   - ถ้าไม่มีไฟล์ → ข้าม + หมายเหตุ "ไม่มี global memory"
-
-2. **Load project memory** — `~/.claude/projects/<project-id>/memory/MEMORY.md`
-   - project id = working directory แปลง `/` → `-` (เช่น `/Users/X/Project/Y` → `-Users-X-Project-Y`)
-   - filter เดียวกับ global memory
-   - ถ้าไม่มี → ข้าม + หมายเหตุ "ไม่มี project memory — fresh start"
-
-3. **Echo top 3-5 entries** กลับให้ user เห็นก่อนเริ่ม design:
-   ```
-   📚 Memory ที่ relevant กับงานนี้ (ux):
-   - [global] feedback-modern-aesthetic — spacing scale 4/8/16, ห้ามใช้ค่าสุ่ม
-   - [project] project_design_system — modern card pattern + Tailwind keyframes
-   - [project] feedback_modern_page_header — ใช้ <PageHeader> shared component
-   ```
-
-4. **Conflict check** — ห้าม redesign สิ่งที่ memory บอก "convention คือ X" — อยากเปลี่ยน ต้องถาม user ก่อน + override → update memory ให้สะท้อน
-
-5. **หลังจบงาน** — save lesson ตาม **8 universal save triggers** ใน `~/.claude/CLAUDE.md` Universal Phase 0 #4 (อ้างตารางว่า save ไป global หรือ project)
-
-### Memory ที่ `ux` ต้องเช็คทุกครั้ง (ถ้ามีใน project)
-
-- `project_design_system.md` — design tokens, animation timing, card pattern
-- `feedback_modern_page_header.md` — shared `<PageHeader>` standard
-- `feedback_section_nav_menu_pattern.md` — TOC sidebar pattern
-- `feedback_no_pulse_animations.md` / `feedback_kiosk_hover_style.md` — animation/hover conventions
-
-### Pre-flight อื่นๆ (ทำคู่กับ Phase 0)
-
-1. **อ่าน CLAUDE.md ของโปรเจกต์** — design system, theme config (เช่น `app/app.config.ts` ใน Nuxt UI), spacing scale
-2. **อ่าน existing component / page ที่เกี่ยวข้อง** — จับ pattern ที่มีอยู่ (design system, spacing scale, color tokens) อย่าสร้าง pattern ใหม่ขนานกัน
-3. **ตรวจ theme config** (เช่น `app.config.ts`) ว่ามี variant ที่ตั้งใจใช้แล้ว — เช่น `variant="card"` ของโปรเจกต์ปัจจุบัน
-
-> ดู `~/.claude/CLAUDE.md` Universal Phase 0 สำหรับ load/save logic เต็ม + skill tag convention
+1. **Design จาก spec/mockup** — user ส่ง mockup / รูป / description
+2. **Review UI** — user ขอตรวจ / วิเคราะห์ / หา issue
+3. **Improve UX** — user ขอปรับให้ดีขึ้น ไม่ระบุปัญหาเจาะจง
 
 ---
 
-## Phase 0.5 — Load skill learnings (mandatory)
+## Phase 0 & 0.5 — Memory load
 
-ลำดับ:
+Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
+- **Memory filter:** `metadata.skill: ux | cross` + keyword (component, page, theme, animation, responsive, a11y)
+- **Learnings filter:** `~/.claude/skills/ux/learnings.md` by Tags (max 5)
+- **Conflict check:** ห้าม redesign สิ่งที่ memory บอก "convention คือ X" — ต้องถาม user ก่อน
+- **Pre-flight:** อ่าน CLAUDE.md ของ project (design system, theme config) + existing components + theme config (`app.config.ts` variant ที่ตั้งใจ)
 
-1. **Extract task keywords** — ดึง keyword จาก request ของ user: component (`UModal`, `USelect`, `UTable`), technique (`animation`, `responsive`, `a11y`, `tailwind-jit`), topic (`hover`, `dark-mode`, `skeleton`, `transition`)
-2. **อ่าน** `~/.claude/skills/ux/learnings.md` — scan เฉพาะ **Tags:** field ของแต่ละ entry
-3. **Load เฉพาะ entry ที่ตรง** — entry ผ่านถ้า Tags มี ≥1 keyword ตรง **และ header ไม่มี `~~`**; ถ้าไม่มี tag ตรงหรือ header มี `~~` (deprecated) → skip ทั้ง entry
-4. **Max 5 entries** — ถ้าตรงมากกว่า 5 → เลือก 5 ที่ keyword match สูงสุด; tie → เลือกที่ Date ใหม่กว่า
-5. **Quote** entry ที่ใช้ใน reasoning — เช่น "ตาม learnings#tailwind-class-must-be-literal จะเขียน class เป็น string literal ทั้งหมด"
-6. **ถ้าไม่มี entry ตรง** → หมายเหตุ "ไม่มี skill learning ตรง — fresh start" (ห้าม fallback โหลดทั้งไฟล์)
-7. **หลังจบงาน** → ถ้าเจอบทเรียน generalize ได้ → append เข้า learnings.md (ดู Quality gates)
+---
 
 ## Handoff (ux เป็นขั้นกลางของ pipeline `sa → ux → fe`)
 
-**รับจาก `sa`** (ถ้า sa ทำมาก่อน — ใช้เป็นจุดเริ่ม ไม่เริ่มจากศูนย์):
-- user story / use case + state machine — ออกแบบ visual ครอบคลุมทุก state (loading/empty/error/success/partial/unauthorized/max boundary)
-- data constraint ที่กระทบ layout (เช่น "code ยาวสุด 5 ตัว" → ออกแบบ slot ให้พอ)
-- acceptance criteria — UI ต้องทำให้ test pass ได้
+**รับจาก `sa`** (ถ้ามี): user story + state machine + data constraint + acceptance criteria
+- ออกแบบ visual ครอบคลุมทุก state (loading/empty/error/success/partial/unauthorized/max-boundary)
+- ระหว่าง design เจอช่องว่าง spec ที่ตอบเองไม่ได้ → **yield กลับ `sa`** อย่าเดา
 
-ถ้า sa ไม่ได้ทำมา (งาน design ตรงๆ ไม่มี requirement gap) — เริ่ม design ได้เลย แต่ถ้าระหว่างทำเจอช่องว่าง spec ที่ตอบเองไม่ได้ → **yield กลับไป sa** ก่อน อย่าเดา
+**ส่งให้ `fe`** เมื่อ design เสร็จ:
+- component map — ใช้ Nuxt UI component ตัวไหน
+- Tailwind class plan — string literal จริง (กัน JIT scan ไม่เจอ)
+- visual state map — state ↔ data state
+- animation spec — property / duration / easing / trigger
+- responsive plan — class set ของแต่ละ breakpoint
+- interaction spec — hover / focus / active / disabled / loading
 
-**ส่งให้ `fe`** เมื่อเสร็จ design (output ต้องชัดพอที่ fe เอาไป implement ได้โดยไม่ต้องตีความ):
-- component map — แต่ละส่วนใช้ Nuxt UI component อะไร (`UButton`, `UCard`, `UModal`, `UForm`, `UFormField`, ...)
-- Tailwind class plan — class string literal จริง (กัน JIT scan ไม่เจอ)
-- visual state map — visual state ↔ data state (ผูกกับ state machine ของ sa)
-- animation spec — property, duration, easing, trigger
-- responsive plan — class set ของแต่ละ breakpoint (sm/md/lg/xl)
-- interaction spec — hover/focus/active/disabled/loading
+**Checklist ux → fe (ติ๊กครบก่อนส่ง):**
+- [ ] component map ครบ
+- [ ] Tailwind class เป็น string literal (ไม่มีค่าจาก variable)
+- [ ] visual state map ครบทุก state ของ sa
+- [ ] responsive plan ทุก breakpoint (sm/md/lg/xl)
+- [ ] interaction spec ครบ (hover/focus/active/disabled/loading)
+- [ ] animation spec หรือระบุชัด "ไม่มี animation"
 
-**Handoff checklist: ux → fe (ติ๊กครบก่อนส่ง — ติ๊กไม่ครบ = ทำต่อ ห้าม handoff)**
-- [ ] component map ครบ: ทุกส่วนของหน้าระบุ Nuxt UI component ที่ใช้
-- [ ] Tailwind class plan เป็น string literal จริง ไม่มีค่าที่ประกอบจาก variable
-- [ ] visual state map ครบ: ทุก visual state ↔ data state ผูกกัน (ครบตาม state machine ของ sa)
-- [ ] responsive plan ระบุ class set ของแต่ละ breakpoint ที่ใช้ (sm/md/lg/xl)
-- [ ] interaction spec ครบ: hover / focus / active / disabled / loading state
-- [ ] animation: ระบุ spec (property/duration/easing) หรือระบุชัดว่า "ไม่มี animation"
-
-**รับจาก `fe` กลับมา** เมื่อ design ไม่ feasible (component ไม่มีใน Nuxt UI v4 / animation ชน performance / layout ทับซ้อน) — ปรับแล้วส่งใหม่
-
-ดู "Skill orchestration" ใน `~/.claude/CLAUDE.md` สำหรับ pipeline เต็ม
+**รับจาก `fe` กลับ** เมื่อ design ไม่ feasible → ปรับแล้วส่งใหม่
 
 ---
 
-## Mode 1: Design จาก spec / mockup
+## Mode 1: Design จาก mockup
 
-ลำดับการคิด:
-
-1. **อ่าน mockup ทุกรายละเอียด** — สี, ฟอนต์, ขนาด, spacing, border radius, shadow, รัศมีโค้ง, gradient direction. อย่าเดา
+1. **อ่าน mockup ทุกรายละเอียด** — สี ฟอนต์ ขนาด spacing radius shadow gradient อย่าเดา
 2. **หา component / utility ที่ reuse ได้** ในโปรเจกต์ก่อนเขียนใหม่
-3. **เลือก semantic HTML ก่อน styling** — `<button>` ไม่ใช่ `<div onClick>`, `<nav>` ไม่ใช่ `<div class="nav">`, `<img alt>` ไม่ใช่ background-image สำหรับ content
-4. **ใช้ design system ของโปรเจกต์ก่อน custom CSS** — Nuxt UI, shadcn, MUI ฯลฯ
-5. **Map สีตาม mockup ตรงๆ** — อย่าแปลงเป็น token ที่ใกล้เคียงโดยพลการ ถ้า mockup ใช้ `#7a1818` ก็ใช้ตาม
-6. **ทำตามลำดับ outer → inner** — layout ใหญ่ก่อน, แล้วค่อยใส่ component, ค่อยใส่ detail
+3. **Semantic HTML ก่อน styling** — `<button>` ไม่ใช่ `<div onClick>`; `<nav>`, `<img alt>`
+4. **ใช้ design system ก่อน custom CSS** — Nuxt UI / shadcn / MUI
+5. **Map สีตรงๆ** อย่าแปลงเป็น token ใกล้เคียงโดยพลการ
+6. **Outer → inner** — layout ใหญ่ก่อน, component, detail
 
-หลังเขียน checklist:
-
-- [ ] match mockup ทุก element หรือยัง? (ตำแหน่ง, ขนาด, สี, ฟอนต์)
-- [ ] icon-only button มี `aria-label` หรือ `title`?
-- [ ] disabled state ดูชัดเจน (opacity ต่ำ + cursor-not-allowed)?
-- [ ] hover/active/focus state มีครบ?
-- [ ] responsive ที่ breakpoint หลัก (mobile/tablet/desktop) ดูได้?
+**Post-write checklist:** match mockup ทุก element / icon-only button มี aria-label / disabled ชัด / hover-active-focus ครบ / responsive breakpoint หลักดูได้
 
 ---
 
 ## Mode 2: Review UI
 
-ตรวจตามหมวดต่อไปนี้ **อ่านโค้ดจริง** ก่อน comment:
+อ่านโค้ดจริงก่อน comment เสมอ
 
-### Accessibility
+**Accessibility:** icon-only มี `aria-label` / img มี `alt` (alt="" ถ้า decorative) / input มี `<label for>` / contrast ≥ 4.5:1 / focus ring มองเห็น / modal มี focus trap + Esc ปิด / `lang="th"` ที่ html
 
-- icon-only button → ต้องมี `aria-label`
-- รูป → ต้องมี `alt` (alt="" ถ้า decorative)
-- form input → มี `<label>` ผูก `for` หรือ `aria-labelledby`
-- color contrast text/bg ≥ 4.5:1 (3:1 สำหรับตัวใหญ่ ≥18px bold หรือ ≥24px regular)
-- focus ring มองเห็นได้ (อย่า `outline-none` โดยไม่ใส่อะไรแทน)
-- modal / dialog → focus trap, Esc ปิดได้, return focus หลังปิด
-- เนื้อหาภาษาไทย → `lang="th"` ที่ html
+**Responsive:** test 375/768/1280px / tap target ≥ 44×44 / body font ≥ 14px / input ≥ 16px (iOS no-zoom) / ไม่มี horizontal scroll / overflow ใช้ `truncate` / `line-clamp`
 
-### Responsive
+**Hierarchy:** heading ลำดับชั้นตาม importance / spacing scale คงที่ (4/8/12/16/24) / alignment สอดคล้องในกลุ่ม
 
-- ตรวจ breakpoint mobile (375px), tablet (768px), desktop (1280px+)
-- ปุ่มใหญ่พอแตะ (≥ 44×44px ที่ mobile)
-- font-size ≥ 14px ที่ body, ≥ 16px ถ้าเป็น input (กัน iOS auto-zoom)
-- horizontal scroll ไม่ควรมี (ยกเว้น carousel)
-- text overflow มี `truncate` / `line-clamp` ชัดเจน
+**States:** loading = skeleton/spinner / empty = ข้อความ + คำแนะนำ / error = ข้อความเข้าใจได้ + ลองใหม่ / success = feedback ทันที
 
-### Hierarchy & spacing
-
-- heading ลำดับชั้นชัด (h1 > h2 > h3 ตาม importance ไม่ใช่แค่ size)
-- spacing scale คงที่ (4 / 8 / 12 / 16 / 24 ...) ไม่มั่ว
-- alignment สอดคล้องกันในกลุ่มเดียวกัน
-
-### States
-
-- loading: skeleton หรือ spinner — ไม่ใช่จออะไรก็ไม่มี
-- empty: มีข้อความ + คำแนะนำว่าทำยังไงต่อ
-- error: ข้อความเข้าใจได้ (ไม่ใช่ "Error 500") + ปุ่มลองใหม่
-- success: feedback ทันทีหลัง action
-
-รายงานผล: list issue ที่เจอเป็นข้อๆ พร้อม **severity** (blocker / major / minor) และไฟล์:บรรทัด
+รายงาน: list issue + **severity** (blocker / major / minor) + file:line
 
 ---
 
 ## Mode 3: Improve UX
 
 หา friction points:
+1. **คลิก/แตะมากเกิน** — task ใช้กี่ step? ลดได้ไหม
+2. **affordance ไม่ชัด** — สี/shadow/cursor บอกว่ากดได้ไหม
+3. **ระบบทำอะไรอยู่ไม่ชัด** — loading/progress/toast หลัง action
+4. **อ่านลำดับยาก** — visual hierarchy ดึงสายตาไปสิ่งสำคัญที่สุดก่อน
+5. **ไม่สม่ำเสมอ** — ปุ่ม/spacing แบบเดียวกันต่างกันไหม
+6. **edge case หลุด** — text ยาวล้น / empty / network ช้า
 
-1. **คลิก/แตะมากเกิน** — task นี้ใช้กี่ step? ลดได้ไหม
-2. **ไม่ชัดว่ากดอะไรได้** — affordance ของปุ่มเด่นพอไหม (สี / shadow / cursor)
-3. **ไม่ชัดว่าระบบทำอะไรอยู่** — มี loading indicator / progress / toast หลัง action
-4. **อ่านลำดับยาก** — visual hierarchy ดึงสายตาไปสิ่งสำคัญที่สุดก่อนหรือเปล่า
-5. **ความไม่สม่ำเสมอ** — ปุ่มแบบเดียวกันมี style ต่างกันไหม spacing ของหัวข้อแบบเดียวกันต่างกันไหม
-6. **edge case ที่หลุด** — text ยาวล้นไหม, empty list บอกอะไรไหม, network ช้าเห็น state อะไร
-
-เสนอปรับเป็น **patch เล็กๆ ทีละจุด** อย่ารื้อใหญ่โดยไม่จำเป็น
+เสนอเป็น **patch เล็กๆ ทีละจุด** อย่ารื้อใหญ่โดยไม่จำเป็น
 
 ---
 
 ## Universal principles
 
-- **Mobile-first ในใจ** — ออกแบบ mobile ก่อน แล้ว enhance ด้วย breakpoint ขึ้นไป
-- **Spacing scale คงที่** — ใช้ 4/8/12/16/24/32... ไม่ใช่ค่าสุ่ม
-- **Touch target ≥ 44×44px** สำหรับ tap target บน mobile
-- **Contrast ≥ 4.5:1** สำหรับ body text
-- **อย่าใช้ color เป็นสัญลักษณ์อย่างเดียว** — เพิ่ม icon / label เผื่อคนตาบอดสี
-- **Animation ≤ 300ms** สำหรับ UI feedback (เกินกว่านี้รู้สึกอืด); 0ms ถ้า user ตั้ง `prefers-reduced-motion`
-- **ลำดับ z-index ชัดเจน** — modal > dropdown > tooltip > sticky > content
-- **อย่าซ่อน scrollbar บน desktop** — กัน user งง
+- **Mobile-first ในใจ** — เขียน base mobile, enhance ด้วย breakpoint ขึ้น
+- **Spacing scale คงที่** — 4/8/12/16/24/32 ไม่ใช่ค่าสุ่ม
+- **Touch target ≥ 44×44px** บน mobile
+- **Contrast ≥ 4.5:1** body text
+- **อย่าใช้ color เป็น signal เดียว** — เพิ่ม icon/label เผื่อตาบอดสี
+- **Animation ≤ 300ms** UI feedback; 0ms ถ้า `prefers-reduced-motion`
+- **z-index ชัดเจน** — modal > dropdown > tooltip > sticky > content
 
 ---
 
 ## Modern aesthetic
 
-เป้าหมาย: **ดูทันสมัย สะอาด มีรสนิยม** — ไม่ใช่ flat เฉยๆ และไม่ใช่ skeuomorphic หรูหราเกิน
+**ดูทันสมัย สะอาด มีรสนิยม** — ไม่ flat เฉยๆ และไม่ skeuomorphic
 
-### Visual language
+- **Spacing โปร่ง** — 16/24/32 มากกว่า 8/12 ให้ content หายใจ
+- **Border radius สม่ำเสมอ** — เลือก scale เดียว (`rounded-lg` 8px / `rounded-xl` 12 / `rounded-2xl` 16) ห้ามผสม
+- **Shadow soft & layered** — `shadow-sm` / `shadow-md` ไม่ใช่ดำจัด; depth ผ่าน blur
+- **Typography hierarchy ผ่านน้ำหนัก** — `font-semibold`/`font-bold` + scale 14/16/20/24/32; `leading-relaxed` body
+- **Color palette จำกัด** — primary 1 + neutral + accent 1 (success/warning/danger คนละตัว); ≤ 5 family ต่อจอ
+- **Gradient & glass แต่พอดี** — gradient เฉพาะ hero/CTA; `backdrop-blur` เฉพาะ overlay/header
+- **Border บาง** — `border` 1px, สีโทน neutral (`border-slate-200` / `border-white/10`)
+- **Dark mode** — semantic token (`bg-background` `text-foreground`) ไม่ hardcode
 
-- **Spacing โปร่ง** — ใช้ padding/gap เผื่อมากกว่าที่คิดเล็กน้อย (16/24/32 มากกว่า 8/12) ให้ content หายใจได้
-- **Border radius สม่ำเสมอ** — เลือก scale เดียวทั้ง app (เช่น `rounded-lg` 8px / `rounded-xl` 12px / `rounded-2xl` 16px) อย่าผสม
-- **Shadow แบบ soft & layered** — ใช้ shadow โทนอ่อน (`shadow-sm` / `shadow-md` ของ Tailwind) ไม่ใช่ดำจัด; depth ผ่าน blur ไม่ใช่ความเข้ม
-- **Typography hierarchy ชัดผ่านน้ำหนัก ไม่ใช่ขนาดอย่างเดียว** — `font-semibold` / `font-bold` กับ scale 14/16/20/24/32; line-height โปร่ง (`leading-relaxed` สำหรับ body)
-- **Color palette จำกัด** — primary 1 สี + neutral scale + accent 1 สี (success/warning/danger คนละตัว) อย่าใช้สีเกิน 5 family ในจอเดียว
-- **Gradient & glass ใช้แต่พอดี** — gradient สำหรับ hero / CTA สำคัญเท่านั้น; `backdrop-blur` กับ semi-transparent bg ดูทันสมัยแต่ใช้เฉพาะ overlay/header
-- **Border บางกว่า 1px** ถ้ารองรับ (`border` Tailwind = 1px ok); สีโทน neutral อ่อน (`border-slate-200` / `border-white/10` บน dark)
-- **Dark mode support** — ถ้าโปรเจกต์มี ใช้ semantic token (`bg-background` `text-foreground`) ไม่ใช่ hardcode
-
-### Polish
-
-- **Hover state ละเอียด** — เปลี่ยน bg เล็กน้อย + lift shadow + scale 1.01-1.02 (ไม่เกิน)
-- **Focus ring สวย** — `ring-2 ring-primary/50 ring-offset-2` แทน outline default
-- **Skeleton loading** แทน spinner เปล่าๆ ในจอ list/card — ดูพรีเมียมกว่า
-- **Empty state มี illustration หรือ icon ใหญ่** + ข้อความเชิญชวน + CTA
+**Polish:**
+- Hover: bg เปลี่ยน + shadow lift + scale 1.01–1.02 (ไม่เกิน)
+- Focus: `ring-2 ring-primary/50 ring-offset-2`
+- Skeleton loading แทน spinner เปล่า
+- Empty state: illustration/icon ใหญ่ + เชิญชวน + CTA
 
 ---
 
 ## Animation
 
-หลัก: **เสริม UX ไม่ใช่ขโมย attention** — ถ้าผู้ใช้สังเกตว่ามี animation แสดงว่าเด่นเกิน
+**หลัก:** เสริม UX ไม่ใช่ขโมย attention — ถ้า user สังเกตว่ามี = เด่นเกิน
 
-### When to animate
+**When to animate:** state change (modal/accordion/tab/toast), feedback (button press, hover), continuity (FLIP, reorder), loading (skeleton, progress), attention (pulse badge — ใช้น้อย)
 
-- **State change** — modal เปิด/ปิด, accordion expand, tab switch, toast เข้า/ออก
-- **Feedback** — ปุ่มกดแล้ว (scale ลงนิด), hover (bg/shadow transition), success checkmark
-- **Continuity** — element ขยับจากที่หนึ่งไปอีกที่ (FLIP), list reorder
-- **Loading** — skeleton shimmer, progress bar, indeterminate spinner
-- **Attention (ใช้น้อย)** — pulse บน notification badge, bounce บน CTA สำคัญครั้งเดียว
+**อย่า animate:** scrolling content, page load ทุกครั้ง, decorative bg loop, text ทุกบรรทัด fade-in
 
-อย่า animate: scrolling content, page load ทุกครั้ง, decorative bg loop ที่ไม่หยุด, text ทุกบรรทัด fade-in
+**Timing:**
+- micro (hover, press): **100–150ms**
+- small (tooltip, dropdown): **150–200ms**
+- medium (modal, drawer): **200–300ms**
+- large (hero): **300–500ms** ไม่ค่อยใช้
 
-### Timing & easing
+**Easing:**
+- `ease-out` enter (เร็วต้น ช้าปลาย — รู้สึก responsive)
+- `ease-in` exit (ช้าต้น เร็วปลาย — หายเร็ว)
+- `ease-in-out` loop
+- หลีกเลี่ยง `linear` ยกเว้น progress
+- playful: `cubic-bezier(0.34, 1.56, 0.64, 1)` (overshoot)
 
-- **Duration**:
-  - micro (hover, button press): **100-150ms**
-  - small (tooltip, dropdown): **150-200ms**
-  - medium (modal, drawer, page transition): **200-300ms**
-  - large (full-screen takeover, hero): **300-500ms** (ไม่ค่อยใช้)
-- **Easing**:
-  - `ease-out` สำหรับ enter (เร็วต้น ช้าปลาย — รู้สึก responsive)
-  - `ease-in` สำหรับ exit (ช้าต้น เร็วปลาย — หายไปเร็ว)
-  - `ease-in-out` สำหรับ loop / continuous
-  - หลีกเลี่ยง `linear` ยกเว้น progress bar / loading
-  - custom curve สำหรับ playful: `cubic-bezier(0.34, 1.56, 0.64, 1)` (overshoot นิดๆ)
+**Properties (GPU-cheap):** `transform` (translate/scale/rotate), `opacity`, `filter` (ระวังหนัก)
+**หลีกเลี่ยง:** animate `width`/`height`/`top`/`left`/`margin` — กระตุก → ใช้ `transform`
 
-### Properties ที่ animate ได้ "ฟรี" (GPU)
+**Patterns:**
+- Fade + slide: modal/drawer (`opacity 0→1` + `translateY 8px→0`)
+- Scale + fade: dropdown/popover (`scale 0.95→1` + `opacity 0→1`, transform-origin ที่ trigger)
+- Stagger list: child เข้าทีละ 30–50ms (≤ 5 ตัว)
+- Spring physics: drag/swipe — Motion / Framer Motion / Vue equivalent
+- View Transitions API: page/route transition (native, modern)
 
-- `transform` (translate, scale, rotate)
-- `opacity`
-- `filter` (blur, brightness — ระวังหนัก)
+**Tools Vue/Nuxt:** `<Transition>`, `<TransitionGroup>`, `@vueuse/motion`, CSS `@keyframes`, Tailwind `transition-*` + `duration-*` + `ease-*`
 
-หลีกเลี่ยง animate `width`/`height`/`top`/`left`/`margin` — กระตุก ใช้ `transform` แทน
+**Accessibility:** เคารพ `prefers-reduced-motion` — ทุก non-essential animation ต้อง wrap ด้วย media query / JS check; ห้าม autoplay ที่ดึง attention; loop ต้อง pause ได้
 
-### Patterns ที่ดูดี
-
-- **Fade + slide** สำหรับ modal/drawer (`opacity 0→1` + `translateY 8px→0`)
-- **Scale + fade** สำหรับ dropdown/popover (`scale 0.95→1` + `opacity 0→1`, transform-origin ที่ trigger)
-- **Stagger list** — child เข้าทีละ 30-50ms (ไม่เกิน 5 ตัว ไม่งั้นช้า)
-- **Spring physics** สำหรับ playful interaction (drag, swipe) — ใช้ Motion / Framer Motion / Vue equivalent
-- **View Transitions API** สำหรับ page/route transition (modern, native)
-
-### Tools ใน Vue/Nuxt
-
-- **`<Transition>` / `<TransitionGroup>`** — built-in, พอสำหรับ enter/leave ส่วนใหญ่
-- **`@vueuse/motion`** หรือ **Motion for Vue** — สำหรับ spring, gesture, scroll-triggered
-- **CSS `@keyframes`** + `animate-*` classes — สำหรับ loop (pulse, shimmer, spin)
-- **Tailwind `transition-*` + `duration-*` + `ease-*`** — เพียงพอสำหรับ micro-interaction
-
-### Accessibility
-
-- **เคารพ `prefers-reduced-motion`** เสมอ — wrap ทุก non-essential animation ใน:
-  ```css
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
-  }
-  ```
-  หรือเช็คใน JS: `window.matchMedia('(prefers-reduced-motion: reduce)').matches`
-- **อย่า autoplay** animation ที่ดึง attention (flash, shake) บน user ที่ตั้ง reduce
-- **Loop animation** ที่ไม่หยุด ต้องสามารถ pause ได้ (เช่น carousel)
-
-### Checklist หลังใส่ animation
-
-- [ ] ทุก animation ≤ 300ms (ยกเว้น hero/onboarding)
-- [ ] ใช้ `transform` + `opacity` เป็นหลัก ไม่ใช่ `width`/`height`
-- [ ] enter ใช้ `ease-out`, exit ใช้ `ease-in`
-- [ ] เคารพ `prefers-reduced-motion`
-- [ ] ไม่มี loop animation ที่กิน CPU/GPU ตลอดเวลาในจอที่ idle
-- [ ] ทดสอบบน mobile แล้วยังลื่น 60fps
+**Animation checklist:** ≤ 300ms / `transform` + `opacity` เป็นหลัก / enter `ease-out`, exit `ease-in` / เคารพ reduced-motion / ไม่มี loop กิน CPU/GPU idle / ลื่น 60fps mobile
 
 ---
 
-## Responsive design (บังคับเสมอ ทุกหน้า ทุก component)
+## Responsive (บังคับทุกหน้า ทุก component)
 
-หลัก: **ทุกสิ่งที่ออกแบบต้องรองรับทุกขนาดจอ** — ไม่มี "หน้านี้ใช้แค่ desktop" หรือ "อันนี้เดี๋ยวค่อยทำ mobile". ถ้าไม่ได้ระบุ scope, ตั้งสมมติฐานว่าผู้ใช้จะเปิดบน mobile ก่อน
+**หลัก:** ทุก design รองรับทุกขนาด — mobile-first เสมอ
 
-### Breakpoints มาตรฐาน (Tailwind)
+**Breakpoints (Tailwind):** `< 640px` mobile / `sm:` 640 / `md:` 768 / `lg:` 1024 / `xl:` 1280 / `2xl:` 1536
 
-- `< 640px` — mobile (default, no prefix)
-- `sm:` ≥ 640px — large mobile / small tablet portrait
-- `md:` ≥ 768px — tablet
-- `lg:` ≥ 1024px — small desktop / tablet landscape
-- `xl:` ≥ 1280px — desktop
-- `2xl:` ≥ 1536px — large desktop
+**กฎประจำ:**
+- **Layout:** `flex` / `grid` + `flex-wrap` / `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` — อย่า hardcode px
+- **Width:** `w-full` + `max-w-*` แทน `w-[480px]`
+- **Padding/gap responsive:** `p-4 md:p-6 lg:p-8`, `gap-3 md:gap-4 lg:gap-6`
+- **Font responsive:** `text-base md:text-lg`, heading `text-2xl md:text-3xl lg:text-4xl`
+- **Hidden/show:** `hidden md:block` (desktop nav), `md:hidden` (mobile drawer trigger)
+- **Image:** `w-full h-auto object-cover` หรือ `aspect-video` / `aspect-square`
+- **Container:** `mx-auto max-w-7xl px-4 sm:px-6 lg:px-8` (หรือ pattern โปรเจกต์)
+- **Touch target ≥ 44×44px** mobile / **Input ≥ 16px** mobile (no iOS auto-zoom)
 
-ออกแบบ **mobile-first** เสมอ — เขียน base style สำหรับ mobile, แล้ว enhance ขึ้นด้วย `sm:` `md:` `lg:` ฯลฯ ไม่ใช่เขียน desktop ก่อนแล้ว override ลง mobile
+**Patterns เจอบ่อย:**
+- Nav: desktop horizontal → mobile hamburger + drawer
+- Table: desktop full → mobile card list หรือ horizontal scroll
+- Sidebar: desktop fixed → mobile drawer / bottom sheet
+- Form 2-col: `grid-cols-1 md:grid-cols-2 gap-4`
+- Modal: desktop center → mobile full-screen / bottom sheet
+- Card grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`
+- Hero: desktop side-by-side → mobile stack
 
-### กฎประจำสำหรับทุก component
+**Edge cases ต้องเช็ค:**
+- Text ยาวมาก — `truncate` / `line-clamp-2` / `break-words`
+- จอแคบ (< 360px) — ปุ่มหลายตัว wrap/stack
+- จอกว้าง (> 1920px) — `max-w-*` จำกัด
+- Landscape mobile — modal/sheet scroll ภายใน
+- Zoom 200% — layout ไม่พังกู้ไม่ได้
+- Sticky header + virtual keyboard — input อาจถูกบัง
 
-- **Layout**: ใช้ `flex` / `grid` + `flex-wrap` / `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` — อย่า hardcode width เป็น px
-- **Width**: prefer `w-full` + `max-w-*` แทน `w-[480px]` คงที่
-- **Padding/gap responsive**: `p-4 md:p-6 lg:p-8`, `gap-3 md:gap-4 lg:gap-6` — spacing ใหญ่ขึ้นตามจอ
-- **Font size responsive**: `text-base md:text-lg`, heading `text-2xl md:text-3xl lg:text-4xl`
-- **Hidden/show ตามจอ**: `hidden md:block` (desktop nav), `md:hidden` (mobile drawer trigger) — ไม่ใช่เอา component หาย
-- **Image/media**: `w-full h-auto object-cover` หรือ `aspect-video` / `aspect-square` — อย่า fixed wxh
-- **Container**: `mx-auto max-w-7xl px-4 sm:px-6 lg:px-8` (หรือ pattern ที่โปรเจกต์ใช้อยู่)
-- **Touch target ≥ 44×44px** บน mobile (ปุ่มเล็กบน desktop ก็ได้ แต่ mobile ต้องใหญ่)
-- **Input font-size ≥ 16px** บน mobile (กัน iOS auto-zoom เวลา focus)
+---
 
-### Pattern ที่เจอบ่อย
+## Quality gates (ก่อนปิดงาน ทุก mode)
 
-- **Nav**: desktop horizontal menu → mobile hamburger + drawer/sheet
-- **Table**: desktop full table → mobile card list หรือ horizontal scroll (`overflow-x-auto`)
-- **Sidebar**: desktop fixed sidebar → mobile collapsible drawer / bottom sheet
-- **Form 2 column**: `grid-cols-1 md:grid-cols-2 gap-4`
-- **Modal**: desktop center dialog → mobile full-screen หรือ bottom sheet (slide up)
-- **Card grid**: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`
-- **Hero**: desktop side-by-side text + image → mobile stack (text บน, image ล่าง หรือกลับกัน)
-- **Long text + sidebar**: desktop 2-column → mobile stack, sidebar เลื่อนลงล่างหรือเป็น collapse
+- [ ] **Memory scanned** — quote `feedback_*` UI/design ที่ relevant
+- [ ] **Convention check** — ตรงกับ design system / theme config ไม่สร้าง parallel pattern
+- [ ] **Vite compile** (ถ้าแก้ template) — `curl /<page>` HTTP 200 + dev log ไม่มี `Invalid end tag`
+- [ ] **Reka UI item value** (USelect/USelectMenu) — items ไม่มี `value: ""` / `value: ''` (scan ทั้ง single + double quote)
+- [ ] **DevTools responsive test** ที่ **375 / 390 / 768 / 1024 / 1440px**
+- [ ] ไม่มี horizontal scroll ที่ไม่ตั้งใจ
+- [ ] tap target ≥ 44×44 mobile
+- [ ] text ไม่ล้น/ทับ ทุก breakpoint
+- [ ] image ไม่บิด/ล้น
+- [ ] nav ใช้งานได้ทั้ง mobile (hamburger) + desktop
+- [ ] modal/drawer ใช้งานได้ mobile (ไม่เกินจอ, scroll ใน)
+- [ ] form กรอกได้ครบ mobile (input ไม่ถูก keyboard บัง)
+- [ ] **Skill learnings updated** ถ้าเจอบทเรียน generalize ข้าม project (Tailwind JIT, Nuxt UI v4 quirk, animation timing, a11y recurring)
+- [ ] ห้ามประกาศ "เสร็จ / สวยแล้ว" ก่อนผ่าน checklist — user สั่ง "แปลกๆ" = scan แรกไม่ดีพอ
 
-### Edge cases ที่ต้องเช็คเสมอ
+---
 
-- **Text ยาวมาก** — `truncate` / `line-clamp-2` / `break-words` กัน layout แตก
-- **จำนวน item เยอะ** — list scroll, pagination, virtualize
-- **จอแคบมาก (< 360px)** — ปุ่มหลายตัวเรียงกันต้อง wrap หรือ stack ได้
-- **จอกว้างมาก (> 1920px)** — content ไม่ยืดเต็มจนอ่านยาก ใช้ `max-w-*` จำกัด
-- **Landscape mobile** (height สั้น) — modal/sheet ที่ใหญ่ต้อง scroll ภายในได้
-- **Zoom 200%** (accessibility) — layout ไม่ควรพังแบบกู้ไม่ได้
-- **Sticky header + virtual keyboard** บน mobile — input ที่อยู่บน sticky อาจถูกบัง
+## Kiosk / display projects
 
-### Quality gates (บังคับก่อนปิดงาน — ทั้ง 3 mode)
+หน้าจอ kiosk fix ขนาด **แต่โค้ดยังต้อง responsive** — test laptop, เปลี่ยนรุ่นจอ, demo บน iPad
 
-- [ ] **Memory scanned** — quote `feedback_*` UI/design memory ที่ relevant ใน proposal
-- [ ] **Convention check** — design ตรงกับ design system / theme config (เช่น `app.config.ts`)? ไม่สร้าง pattern parallel
-- [ ] **Vite compile** (ถ้าแก้ template) — `curl http://localhost:3000/<page>` HTTP 200 + ดู dev log ไม่มี `Invalid end tag` (ดู `feedback_dangling_tag_after_wrapper_removal.md`)
-- [ ] **Reka UI item value check** (ถ้าใช้ USelect/USelectMenu) — items ไม่มี `value: ""` หรือ `value: ''` (ดู `feedback_select_item_value_empty_string.md`) — scan ทั้ง single + double quote
-- [ ] เปิด DevTools responsive mode ทดสอบที่ **375px** (iPhone SE), **390px** (iPhone 14), **768px** (iPad), **1024px**, **1440px**
-- [ ] ไม่มี horizontal scroll ที่ไม่ตั้งใจ (ยกเว้น carousel/table)
-- [ ] ปุ่มทุกตัว tap ได้สบายบน mobile (≥ 44×44)
-- [ ] text ไม่ล้น ไม่ทับกัน ทุก breakpoint
-- [ ] image ไม่บิด ไม่ล้น (aspect ratio คงที่)
-- [ ] nav/menu ใช้งานได้ทั้ง mobile (hamburger) และ desktop (horizontal)
-- [ ] modal/drawer ใช้งานได้บน mobile (ไม่เกินจอ, scroll ภายในได้)
-- [ ] form กรอกได้ครบบน mobile (ไม่มี input ถูกบัง, keyboard ไม่ปิดปุ่ม submit)
-- [ ] **ห้ามประกาศ "เสร็จ / สวยแล้ว"** ก่อนผ่าน checklist — ถ้าผู้ใช้ต้องสั่ง "แปลกๆ / ตรงไหนผิด" = scan แรกไม่ดีพอ → update memory
-- [ ] **Update skill learnings** ที่ `~/.claude/skills/ux/learnings.md` ถ้าเจอบทเรียนที่ generalize ข้าม project (Tailwind JIT pitfall, Nuxt UI v4 component quirk, animation timing default, a11y miss ที่ recurring) — append entry ตาม format ในไฟล์
-
-### หมายเหตุสำหรับโปรเจกต์ kiosk / display
-
-หน้าจอ kiosk / display อาจ fix ขนาดจริง — แต่โค้ดยัง **ต้อง responsive** เผื่อ:
-
-- ทดสอบบน laptop/dev machine ที่จอเล็กกว่า
-- เปลี่ยนรุ่นจอในอนาคต
-- ผู้ใช้ภายใน demo บน iPad
-
-ถ้าต้อง lock ที่ resolution หนึ่ง ใช้ `transform: scale()` กับ container fixed (ดู `app/pages/customer/kiosk.vue` เป็น reference) — ไม่ใช่ hardcode px ทุกที่
+Lock resolution → `transform: scale()` กับ container fixed — ไม่ hardcode px ทุกที่
 
 ---
 
 ## เมื่อไหร่ "ไม่ต้อง" ปรับ
 
-- pattern ที่มีอยู่ใช้งานได้ + สม่ำเสมอกับโปรเจกต์ → อย่าเปลี่ยนเพราะ "ฉันมีรสนิยมต่าง"
-- mockup ระบุชัด → ทำตาม mockup อย่าเอารสนิยมส่วนตัวมาทับ
-- UX ที่ดีพอแล้ว และผู้ใช้ไม่ได้ขอปรับ → อย่า over-engineer
+- Pattern เดิม + สม่ำเสมอ → อย่าเปลี่ยนเพราะ "ฉันมีรสนิยมต่าง"
+- Mockup ระบุชัด → ทำตาม mockup
+- UX ดีอยู่แล้ว user ไม่ขอปรับ → อย่า over-engineer
 
-แจ้งผู้ใช้เสมอเมื่อตัดสินใจตรงข้ามกับ mockup / ของเดิม พร้อมเหตุผล — ให้ผู้ใช้เลือก
+ตัดสินใจตรงข้ามกับ mockup/ของเดิม → แจ้ง user + เหตุผล ให้ user เลือก
