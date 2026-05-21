@@ -1,0 +1,12 @@
+{
+  "name": "claude-skill-copy",
+  "skills": [
+    "skills/engineering/audit/SKILL.md",
+    "skills/engineering/debug/SKILL.md",
+    "skills/engineering/fe/SKILL.md",
+    "skills/engineering/migrate/SKILL.md",
+    "skills/engineering/sa/SKILL.md",
+    "skills/engineering/ux/SKILL.md",
+    "skills/misc/_template/SKILL.md"
+  ]
+}
