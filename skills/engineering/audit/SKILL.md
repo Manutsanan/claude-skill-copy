@@ -5,96 +5,96 @@ description: Use for whole-project health sweep across 4 dimensions — Performa
 
 # audit — Project health sweep (4 dimensions, read-only)
 
-**Report only, never fix.** Audit คือสายตา ไม่ใช่มือ — fix ต้อง yield ไป `fe` / `migrate` / `debug`
+**Report only, never fix.** Audit is the eyes, not the hands — fixes must yield to `fe` / `migrate` / `debug`
 
-ทุก finding ต้องมี **file:line + evidence (ตัวเลข) + suggested action** — ไม่ใช่ความเห็น
+Every finding must have **file:line + evidence (numbers) + suggested action** — not opinions
 
 ---
 
 ## Phase 0 & 0.5 — Memory load
 
-Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
+Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 - **Memory filter:** `metadata.skill: audit | cross | fe | sa` + dimension keyword (perf, dead-code, coverage, cve, bloat)
 - **Learnings filter:** `~/.claude/skills/audit/learnings.md` by Tags (max 5)
-- **Critical:** ใช้ memory **กรอง false-positive** — finding ที่ user เคย accept ว่า "ตั้งใจ" → ไม่ขึ้น report (หรือ downgrade เป็น info)
-- **Size check:** `find . -name '*.vue' -o -name '*.ts' | wc -l` > 1000 → บอก user + เสนอ scope ย่อย
+- **Critical:** use memory to **filter false-positives** — findings the user previously accepted as "intentional" → omit from report (or downgrade to info)
+- **Size check:** `find . -name '*.vue' -o -name '*.ts' | wc -l` > 1000 → notify user + propose narrower scope
 
 ---
 
 ## Phase 1 — Stack detection
 
-ระบุ stack เพื่อเลือก tool ที่ใช้ได้จริง:
+Identify stack to pick tools that actually work:
 
-| signal | tool ที่จะใช้ |
+| signal | tool to use |
 |---|---|
-| `package.json` มี `nuxt` | `nuxi`, `vue-tsc`, bundle analyzer |
-| มี `vue` (no nuxt) | `vue-tsc`, vite analyzer |
-| มี `react`/`next` | `tsc`, next bundle analyzer |
-| มี `vitest`/`jest`/`playwright` config | coverage tool ที่ตรงกัน |
-| `pnpm-lock.yaml` / `bun.lockb` / `yarn.lock` / `package-lock.json` | ใช้ pm ตรงกัน |
+| `package.json` has `nuxt` | `nuxi`, `vue-tsc`, bundle analyzer |
+| has `vue` (no nuxt) | `vue-tsc`, vite analyzer |
+| has `react`/`next` | `tsc`, next bundle analyzer |
+| has `vitest`/`jest`/`playwright` config | matching coverage tool |
+| `pnpm-lock.yaml` / `bun.lockb` / `yarn.lock` / `package-lock.json` | use matching pm |
 
-ระบุใน report ว่า audit ทำบน stack อะไร — detect ไม่ได้ → ถาม user
+State in report which stack the audit ran on — can't detect → ask user
 
 ---
 
-## Phase 2 — Dimension scans (ขนานได้)
+## Phase 2 — Dimension scans (parallelizable)
 
-### มิติ 1: Performance / bundle
+### Dimension 1: Performance / bundle
 
 | scan | command / signal | finding example |
 |---|---|---|
 | Full-module import | `rg "import \w+ from ['\"]lodash['\"]"` | `import _ from 'lodash'` → +71KB |
-| Heavy lib in client | `rg "moment\|jquery\|chart.js"` | moment → ใช้ dayjs |
-| ไม่ lazy-load route | page ไม่ใช้ `defineAsyncComponent` / dynamic import | route ใหญ่ใน initial bundle |
-| Image ไม่ optimize | `rg "<img"` (ไม่ใช่ `<NuxtImg>`/`<NuxtPicture>`) | static img ไม่ผ่าน pipeline |
-| N+1 fetch | `useFetch` ใน loop / map | `v-for` ห่อ `useFetch` |
+| Heavy lib in client | `rg "moment\|jquery\|chart.js"` | moment → use dayjs |
+| No lazy-load route | page doesn't use `defineAsyncComponent` / dynamic import | large route in initial bundle |
+| Unoptimized image | `rg "<img"` (not `<NuxtImg>`/`<NuxtPicture>`) | static img bypasses pipeline |
+| N+1 fetch | `useFetch` in loop / map | `v-for` wrapping `useFetch` |
 
-**ห้ามเคลม "ช้า" ถ้าไม่มีตัวเลข** — bundle KB / render count / waterfall
+**Never claim "slow" without numbers** — bundle KB / render count / waterfall
 
-### มิติ 2: Code Quality / anti-pattern
+### Dimension 2: Code Quality / anti-pattern
 
 | scan | command / signal | finding example |
 |---|---|---|
-| Dead code (export) | `rg "export "` + trace caller `rg "from ['\"].*<file>['\"]"` | export ที่ 0 caller |
-| Duplicate logic | function name คล้าย + body similar | `formatDate` 3 ที่ |
-| God component | `wc -l app/components/*.vue` > 500 | `OrderForm.vue` 1200 บรรทัด |
-| Deep nesting | `v-if` / `v-for` ซ้อน ≥ 4 ชั้น | template nesting hell |
-| Magic number | `rg "\b[0-9]{3,}\b"` ใน logic | `setTimeout(fn, 3600000)` |
+| Dead code (export) | `rg "export "` + trace caller `rg "from ['\"].*<file>['\"]"` | export with 0 callers |
+| Duplicate logic | similar function name + similar body | `formatDate` in 3 places |
+| God component | `wc -l app/components/*.vue` > 500 | `OrderForm.vue` 1200 lines |
+| Deep nesting | `v-if` / `v-for` nested ≥ 4 levels | template nesting hell |
+| Magic number | `rg "\b[0-9]{3,}\b"` in logic | `setTimeout(fn, 3600000)` |
 | Mutation of props | `rg "props\.\w+ ="` | direct mutate prop |
 
-**ทุก "dead code" ต้อง trace caller ≥ 1 hop ก่อนเคลม** — กฎ Universal CLAUDE.md
+**Every "dead code" must trace caller ≥ 1 hop before claiming** — Universal CLAUDE.md rule
 
-### มิติ 3: Test Coverage / quality
+### Dimension 3: Test Coverage / quality
 
 | scan | command / signal | finding example |
 |---|---|---|
-| Coverage gap | `coverage/coverage-summary.json` | `useAuth.ts` 0% covered, ใช้ 12 ที่ |
-| Critical path no test | high-fan-in file + ไม่มี test | high blast radius, no test |
+| Coverage gap | `coverage/coverage-summary.json` | `useAuth.ts` 0% covered, used in 12 places |
+| Critical path no test | high-fan-in file + no test | high blast radius, no test |
 | Weak assertion | `rg "expect.*\.toBe(true\|truthy\|defined)"` | assert without value |
-| No error case | test มี `it()` แต่ไม่มี `toThrow` / `rejects` | happy path only |
+| No error case | test has `it()` but no `toThrow` / `rejects` | happy path only |
 | Brittle timing | `rg "setTimeout\|setInterval" test/` | flaky timing test |
 | Skip / focus left | `rg "(it\|describe)\.(skip\|only)" test/` | committed `.only` / `.skip` |
 
-**Flag "critical path ไม่มี test"** (high blast radius) — ไม่ flag "test น้อย" ทั่วไป
+**Flag "critical path has no test"** (high blast radius) — don't flag "few tests" in general
 
-### มิติ 4: Dependency / supply chain
+### Dimension 4: Dependency / supply chain
 
 | scan | command | finding example |
 |---|---|---|
 | Outdated | `rtk proxy pnpm outdated` / `rtk proxy npm outdated` | vue@3.4 → 3.5 (major) |
 | CVE | `rtk proxy pnpm audit --prod` / `rtk proxy npm audit --omit=dev` | `lodash@4.17.20` GHSA-xxx |
-| Unused dep | `package.json` deps vs `rg "from ['\"]<dep>['\"]"` | `moment` ใน deps แต่ไม่ import |
-| Duplicate transitive | `rtk proxy pnpm why <pkg>` | 3 version ของ `tslib` |
+| Unused dep | `package.json` deps vs `rg "from ['\"]<dep>['\"]"` | `moment` in deps but not imported |
+| Duplicate transitive | `rtk proxy pnpm why <pkg>` | 3 versions of `tslib` |
 
-**ห้ามรัน `npm install <tool>` เพื่อ scan** — ใช้ tool ที่มีอยู่; ไม่มี → suggest user
+**Never run `npm install <tool>` to scan** — use existing tools; none → suggest to user
 
 ---
 
 ## Phase 3 — Filter + dedupe
 
-- Finding ซ้ำ (30 ไฟล์ import lodash) → รวมเป็น 1 entry + count
-- Finding ใน `node_modules/` / `.nuxt/` / `dist/` / `coverage/` / `*.gen.ts` → ทิ้ง
-- Finding ที่ memory บอก "ตั้งใจ" → ทิ้งหรือ downgrade info
+- Duplicate findings (30 files import lodash) → collapse to 1 entry + count
+- Findings in `node_modules/` / `.nuxt/` / `dist/` / `coverage/` / `*.gen.ts` → discard
+- Findings memory marks as "intentional" → discard or downgrade to info
 
 ---
 
@@ -102,13 +102,13 @@ Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
 
 | severity | criteria |
 |---|---|
-| 🔴 critical | security CVE, data loss, production พังได้ |
-| 🟠 high | perf > 50KB, dead code ≥ 200 line, critical path 0 test |
+| 🔴 critical | security CVE, data loss, can break production |
+| 🟠 high | perf > 50KB, dead code ≥ 200 lines, critical path 0 test |
 | 🟡 medium | duplicate logic ≥ 3, weak assertion ≥ 5, outdated major |
-| 🟢 low | code smell ไม่ block, outdated minor |
+| 🟢 low | non-blocking code smell, outdated minor |
 | ⚪ info | observation only |
 
-Top 10 ต่อมิติ — ที่เหลือ aggregate count
+Top 10 per dimension — aggregate count for the rest
 
 ---
 
@@ -120,7 +120,7 @@ Top 10 ต่อมิติ — ที่เหลือ aggregate count
 **Scope:** 247 .vue + 138 .ts files
 
 ## Summary
-| มิติ | 🔴 | 🟠 | 🟡 | 🟢 | total |
+| dimension | 🔴 | 🟠 | 🟡 | 🟢 | total |
 |---|---|---|---|---|---|
 | Performance   | 2 | 5 | 8 | 3 | 18 |
 | Code Quality  | 0 | 3 | 12| 5 | 20 |
@@ -137,55 +137,55 @@ Top 10 ต่อมิติ — ที่เหลือ aggregate count
 
 ## Post-report: Fix queue (mandatory)
 
-หลัง report ต้อง output **prioritized fix queue** ให้ user พิมพ์ "fix #N" แล้วผมรู้ทันทีว่า invoke skill ไหน + context อะไร:
+After the report, must output a **prioritized fix queue** so user can type "fix #N" and I know immediately which skill to invoke + what context:
 
 ```markdown
 | # | sev | finding | skill | pre-brief |
 |---|---|---|---|---|
-| 1 | 🔴 | CVE `lodash@4.17.20` | `debug` | patch → 4.18.0, verify ด้วย pnpm audit --prod |
-| 2 | 🔴 | `useAuth.ts` 0% coverage, 12 caller | `sa` → `fe` | spec happy+error path ก่อน เขียน test |
-| 3 | 🟠 | full lodash import 8 ไฟล์ | `migrate` | `import _ from 'lodash'` → named import ทั้ง 8 |
+| 1 | 🔴 | CVE `lodash@4.17.20` | `debug` | patch → 4.18.0, verify via pnpm audit --prod |
+| 2 | 🔴 | `useAuth.ts` 0% coverage, 12 callers | `sa` → `fe` | spec happy+error path first, then write tests |
+| 3 | 🟠 | full lodash import in 8 files | `migrate` | `import _ from 'lodash'` → named import across all 8 |
 ```
 
-**กฎ:**
-- เรียง severity สูง → ต่ำ
-- pre-brief ต้องสั้นแต่ชัดพอให้ skill ถัดไปเริ่มได้ทันที
-- pattern เดียวกันหลายไฟล์ → 1 แถว + count
-- **Save fix queue ลง project memory** (`project_audit_fix_queue_YYYY-MM-DD.md`) เพื่อ track ข้าม session
+**Rules:**
+- Order by severity high → low
+- pre-brief must be brief but specific enough for the next skill to start immediately
+- Same pattern across many files → 1 row + count
+- **Save fix queue to project memory** (`project_audit_fix_queue_YYYY-MM-DD.md`) to track across sessions
 
 ---
 
 ## Handoff
 
-- **ทำเองได้** เมื่อเป็น scan + report; ไม่ touch โค้ด
-- **Yield `debug`** — runtime bug จริงระหว่าง scan / CVE exploitable
-- **Yield `fe`** — user ขอ fix; single-file refactor
-- **Yield `migrate`** — pattern เดียวกัน ≥ 10 ไฟล์
-- **Yield `sa`** — test gap บอก requirement กำกวม
+- **Self-contained** when it's scan + report; no touching code
+- **Yield `debug`** — real runtime bug found during scan / exploitable CVE
+- **Yield `fe`** — user asks for fix; single-file refactor
+- **Yield `migrate`** — same pattern in ≥ 10 files
+- **Yield `sa`** — test gap reveals ambiguous requirement
 
 ---
 
 ## Quality gates
 
-- [ ] **ทุก "dead code" ผ่าน caller-trace ≥ 1 hop** — `rg "from ['\"].*<file>['\"]"` คืน 0
-- [ ] **ทุก performance claim มีตัวเลข** — KB / count / time
-- [ ] **ทุก CVE มี advisory ID** — GHSA-xxx / CVE-xxx
-- [ ] **ทุก finding มี file:line** — ไม่มี "หลายไฟล์ทั่ว project"
-- [ ] **Cross-verify 2 patterns** ของ dead code + manual spot-check 2–3 ไฟล์
-- [ ] **ไม่ติดตั้ง tool ใหม่** — suggest แทน
-- [ ] **เคารพ memory** — finding ที่ user เคย accept = ไม่ขึ้น report
-- [ ] **Skill learnings updated** ถ้าเจอบทเรียน generalize ข้าม project ได้
+- [ ] **Every "dead code" passed caller-trace ≥ 1 hop** — `rg "from ['\"].*<file>['\"]"` returns 0
+- [ ] **Every performance claim has numbers** — KB / count / time
+- [ ] **Every CVE has advisory ID** — GHSA-xxx / CVE-xxx
+- [ ] **Every finding has file:line** — no "across many files in project"
+- [ ] **Cross-verify 2 patterns** for dead code + manual spot-check 2–3 files
+- [ ] **No new tool installed** — suggest instead
+- [ ] **Respect memory** — findings user previously accepted = not in report
+- [ ] **Skill learnings updated** if a lesson generalizes across projects
 
-ถ้า user ต้องสั่ง "ชัวไหม / ตรวจซ้ำ" = scan แรกไม่ละเอียดพอ → memo + ปรับทันที
+If user has to say "are you sure / re-check" = first scan wasn't thorough enough → memo + fix immediately
 
 ---
 
-## ห้ามทำ
+## Never do
 
-- ❌ **fix** — audit คือสายตา (yield ไป fe/migrate/debug)
-- ❌ **flag style/format ที่ subjective** — spacing, naming preference, comment style
-- ❌ **flag TODO ทุกอันว่าเป็น smell** — TODO มี context, อ่านก่อน
-- ❌ **ติดตั้ง tool ใหม่** — suggest แทน
-- ❌ **ใช้ severity "critical"** ถ้าไม่มี security / data-loss / production-down
-- ❌ **เคลม "ปลอดภัย / clean / ครบ"** ก่อนผ่าน quality gates
-- ❌ **ทำงานนอก scope** — security review เต็ม → yield `sa` mode B หรือ `/security-review`
+- ❌ **fix** — audit is the eyes (yield to fe/migrate/debug)
+- ❌ **flag subjective style/format** — spacing, naming preference, comment style
+- ❌ **flag every TODO as a smell** — TODOs have context, read first
+- ❌ **install new tools** — suggest instead
+- ❌ **use severity "critical"** without security / data-loss / production-down
+- ❌ **claim "safe / clean / complete"** before passing quality gates
+- ❌ **work out of scope** — full security review → yield `sa` mode B or `/security-review`

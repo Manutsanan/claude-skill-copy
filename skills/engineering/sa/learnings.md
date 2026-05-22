@@ -1,25 +1,25 @@
 # Learnings — sa
 
-> **Per-skill, cross-project memory** — บทเรียนของ skill `sa` ที่ใช้ได้ข้ามทุก project (System Analysis + Security Audit)
+> **Per-skill, cross-project memory** — lessons for skill `sa` that apply across every project (System Analysis + Security Audit)
 >
-> **เก็บอะไรที่นี่:**
-> - Edge case ที่มัก enumerate หลุดบ่อย (concurrent submit, network fail mid-flight, partial success, idempotency)
-> - State machine pattern ที่ pop up บ่อย (loading/empty/error/success/partial/unauthorized/max boundary)
+> **What to keep here:**
+> - Edge cases that are commonly missed during enumeration (concurrent submit, network fail mid-flight, partial success, idempotency)
+> - State machine patterns that pop up often (loading/empty/error/success/partial/unauthorized/max boundary)
 > - OWASP / security pattern (IDOR check, auth boundary, secret leakage point, SSRF surface)
-> - Question template ที่ดึง requirement ออกจาก user ได้ดี (เช่น "ถ้า X เกิดพร้อม Y ระบบทำยังไง")
-> - Diagram pattern ที่สื่อ flow ซับซ้อนได้ตรงประเด็น (sequence vs state vs ER เมื่อไหร่ใช้อะไร)
+> - Question templates that pull requirements out of users effectively (e.g. "if X happens together with Y, what does the system do")
+> - Diagram patterns that convey complex flow accurately (sequence vs state vs ER — when to use which)
 >
-> **ไม่เก็บที่นี่:**
-> - Data model เฉพาะ domain (เช่น Booking entity ของโปรเจกต์ใดโปรเจกต์หนึ่ง → project memory)
-> - Security finding เฉพาะ codebase (อันนั้นเข้า project memory + fix ใน code)
-> - Stakeholder name / business term เฉพาะ project
+> **What not to keep here:**
+> - Domain-specific data models (e.g. Booking entity of one specific project → project memory)
+> - Codebase-specific security findings (those go into project memory + fix in code)
+> - Stakeholder names / project-specific business terms
 >
-> **เมื่อไหร่อ่าน:** ทุกครั้งใน Pre-flight ของ skill `sa` (ทั้ง Mode A Analyze และ Mode B Audit)
-> **เมื่อไหร่ append:** หลังจบงานถ้าเจอบทเรียน generalize ได้ (ดู format ใน `_template/learnings.md`)
+> **When to read:** every time in the Pre-flight of skill `sa` (both Mode A Analyze and Mode B Audit)
+> **When to append:** after a task if a lesson generalizes (see format in `_template/learnings.md`)
 
 ---
 
-## Format ต่อ entry
+## Format per entry
 
 ```markdown
 ## <kebab-case-slug>
@@ -28,16 +28,16 @@
 **Mode:** analyze | audit | both
 **Date:** YYYY-MM-DD
 
-**Context:** สิ่งที่ทำตอนเจอบทเรียน — **1 บรรทัดเท่านั้น**
-**Lesson:** กฎ + เหตุผล
-**How to apply:** ทำยังไงครั้งหน้า
+**Context:** what you were doing when the lesson emerged — **1 line only**
+**Lesson:** rule + reason
+**How to apply:** what to do next time
 ```
 
 ---
 
 ## Entries
 
-<!-- ใหม่สุดอยู่บน -->
+<!-- newest on top -->
 
 ## enumerate-7-visual-states-checklist
 
@@ -45,12 +45,12 @@
 **Mode:** analyze
 **Date:** 2026-05-16
 
-**Context:** ส่ง spec ให้ `ux` แล้ว design ขาด empty / unauthorized state — ux ต้อง yield กลับมาขอ spec ต่อ
-**Lesson:** ทุก spec ที่มี UI ต้อง enumerate visual state ครบ **7 ตัว** อย่างน้อย ก่อนส่ง ux: `loading`, `empty`, `error`, `success`, `partial`, `unauthorized`, `max-boundary` (เช่น list ถึง limit, input ครบ character limit) — ถ้า skip ตัวใด → ux จะเดาเอง → ตีความผิด → rework
+**Context:** handed spec to `ux` and the design was missing empty / unauthorized state — ux had to yield back to ask for more spec
+**Lesson:** every spec with UI must enumerate at least **7 visual states** before handing off to ux: `loading`, `empty`, `error`, `success`, `partial`, `unauthorized`, `max-boundary` (e.g. list at limit, input at character cap) — if any are skipped → ux will guess → misinterpret → rework
 **How to apply:**
-- ตอนเขียน state machine ของหน้า/component ใหม่ → ใช้ 7-state checklist เป็น minimum
-- บาง state อาจ collapse ได้ (เช่น `unauthorized` = redirect ไม่ต้อง render) — แต่ต้อง **state ออกมา** ว่า collapse ไม่ใช่ ignore
-- เขียน `state: <name>` ลงใน Mermaid state diagram ทุกตัว — ห้ามให้ ux ต้องเดา
+- when writing a state machine for a new page/component → use the 7-state checklist as the minimum
+- some states may be collapsible (e.g. `unauthorized` = redirect, no render) — but you must **state explicitly** that it's collapsed, not ignored
+- write `state: <name>` into the Mermaid state diagram for every one — do not make ux guess
 
 
 ## concurrent-submit-race-condition
@@ -59,16 +59,16 @@
 **Mode:** analyze
 **Date:** 2026-05-16
 
-**Context:** spec form submit ที่กดปุ่มเร็วๆ ติดกัน → ส่ง request 2 ครั้ง → DB เกิด duplicate row หรือ payment ถูกชาร์จ 2 ครั้ง
-**Lesson:** ทุก mutating action ต้องระบุใน spec:
-1. **Optimistic disable** — disable ปุ่ม + lock form หลัง click จนกว่า response กลับ
-2. **Idempotency key** — frontend generate UUID ส่งกับ request, backend reject duplicate ที่ key เดิมภายใน window N นาที
-3. **Server-side dedupe** — DB constraint หรือ business rule ที่กัน double-write (เช่น `UNIQUE(user_id, order_id, action)`)
-ขาดข้อใดข้อหนึ่ง = ช่องโหว่
+**Context:** spec for form submit where rapid clicking sends 2 requests → DB gets duplicate row or payment is charged twice
+**Lesson:** every mutating action must specify in spec:
+1. **Optimistic disable** — disable button + lock form after click until response returns
+2. **Idempotency key** — frontend generates UUID sent with request, backend rejects duplicates with same key within an N-minute window
+3. **Server-side dedupe** — DB constraint or business rule that prevents double-write (e.g. `UNIQUE(user_id, order_id, action)`)
+Missing any one = vulnerability
 **How to apply:**
-- ทุกครั้งที่ enumerate edge case ของ form/action → ใส่ "concurrent submit" เป็น default check
-- ส่งให้ fe พร้อม UUID generation pattern + ส่งให้ backend audit (mode B) ว่ามี dedupe layer
-- ตัวอย่าง flow ที่เสี่ยงสูง: payment, OTP request, order create, booking confirm
+- whenever enumerating edge cases of a form/action → include "concurrent submit" as a default check
+- hand off to fe with UUID generation pattern + hand to backend audit (mode B) to verify dedupe layer exists
+- example high-risk flows: payment, OTP request, order create, booking confirm
 
 
 ## idor-test-pattern
@@ -77,12 +77,12 @@
 **Mode:** audit
 **Date:** 2026-05-16
 
-**Context:** Audit route `/api/order/[id]` พบว่า authenticate ผ่าน middleware แต่ไม่เช็คว่า user เป็นเจ้าของ order
-**Lesson:** Authentication (logged in) ≠ Authorization (owns this resource) — IDOR เกิดทุกครั้งที่ "เช็คว่า logged in แล้ว fetch resource by id จาก URL/body โดยไม่เช็ค ownership"
+**Context:** audited route `/api/order/[id]` and found it authenticates via middleware but does not check that the user owns the order
+**Lesson:** Authentication (logged in) ≠ Authorization (owns this resource) — IDOR occurs every time you "check logged-in and then fetch a resource by id from URL/body without checking ownership"
 **How to apply:**
-- ทุก route ที่มี `[id]` / `:id` ใน path หรือ `id` ใน body → ต้อง audit ว่า:
-  1. มี ownership check ที่ระดับ DB query (`WHERE user_id = currentUser.id`) หรือ
-  2. มี role check (`if user.role !== 'admin' && resource.owner !== user.id`)
-- Attack scenario report เสมอ: "Attacker login เป็น user A → GET /api/order/<user B's order id> → ดูข้อมูล user B"
-- Fix: ห้าม trust `id` จาก URL — scope query ด้วย session/JWT subject เสมอ
+- every route with `[id]` / `:id` in path or `id` in body → audit that:
+  1. there is an ownership check at the DB-query level (`WHERE user_id = currentUser.id`), or
+  2. there is a role check (`if user.role !== 'admin' && resource.owner !== user.id`)
+- always report attack scenario: "Attacker logs in as user A → GET /api/order/<user B's order id> → sees user B's data"
+- Fix: never trust `id` from URL — always scope query with session/JWT subject
 

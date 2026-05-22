@@ -5,115 +5,115 @@ description: Use when analyzing requirements before implementation OR auditing s
 
 # sa — System Analyst + Security Audit
 
-2 modes (เลือกตาม intent):
+2 modes (pick by intent):
 
-1. **Mode A: Analyze** — เปลี่ยน requirement คลุมเครือ → spec ที่ implement ได้
-2. **Mode B: Audit** — ตรวจช่องโหว่ของ design / code / config
+1. **Mode A: Analyze** — turn fuzzy requirement → implementable spec
+2. **Mode B: Audit** — find vulnerabilities in design / code / config
 
-**ขอบเขต:** คิดก่อนเขียน / ตรวจหลังเขียน — ไม่ implement เอง (ใช้ `fe` / backend skill ต่อ)
+**Scope:** think before writing / verify after writing — does not implement (hand off to `fe` / backend skill)
 
 ---
 
 ## Phase 0 & 0.5 — Memory load
 
-Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
+Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 - **Memory filter:** `metadata.skill: sa | cross` + keyword (domain, security topic, OWASP category)
 - **Learnings filter:** `~/.claude/skills/sa/learnings.md` by Tags (max 5)
-- **Conflict check:** ถ้า design ขัด memory → หยุดถาม user
-- **Pre-flight:** อ่าน CLAUDE.md ของ project + โค้ดที่เกี่ยวข้อง (อย่า analyze จากสมมติฐาน) + ถามถ้าไม่ชัด
+- **Conflict check:** if design conflicts with memory → stop and ask user
+- **Pre-flight:** read project CLAUDE.md + relevant code (do not analyze from assumptions) + ask if unclear
 
 ---
 
-## Handoff (sa เป็นต้นน้ำของ pipeline `sa → ux → fe`)
+## Handoff (sa is the upstream of pipeline `sa → ux → fe`)
 
-**ส่งให้ `ux`** (เมื่อมี UI):
+**Hand off to `ux`** (when there is UI):
 - user story / use case + main + alternate flow
-- state machine ทุก visual state — loading/empty/error/success/partial/unauthorized/max-boundary
-- data constraint ที่กระทบ layout (max length, item count limit)
-- acceptance criteria แบบ Given/When/Then
+- state machine for every visual state — loading/empty/error/success/partial/unauthorized/max-boundary
+- data constraints that affect layout (max length, item count limit)
+- acceptance criteria in Given/When/Then form
 
-**Checklist sa → ux (ติ๊กครบก่อนส่ง)**
+**Checklist sa → ux (tick all before handoff)**
 - [ ] state machine ≥ 7 states
-- [ ] data constraint ที่กระทบ layout ครบ
-- [ ] acceptance criteria GWT ≥ 1 ข้อต่อ main flow
+- [ ] all data constraints affecting layout listed
+- [ ] acceptance criteria GWT ≥ 1 per main flow
 - [ ] edge cases ≥ 5: empty / max / concurrent / network fail / unauthorized
-- [ ] alternate flow ทุก error case
+- [ ] alternate flow for every error case
 
-**ส่งให้ `fe`** (no UI change หรือเสริม ux):
+**Hand off to `fe`** (no UI change, or supplementing ux):
 - API spec — endpoint, method, request/response shape, error shape, auth requirement
-- data model — entity, field, type, validation rule (สำหรับเขียน valibot)
-- state shape + transition (สำหรับ composable/store)
+- data model — entity, field, type, validation rule (for writing valibot)
+- state shape + transition (for composable/store)
 - security finding + ripple list
 
-**Checklist sa → fe (ติ๊กครบก่อนส่ง)**
-- [ ] API spec ครบทุก field
+**Checklist sa → fe (tick all before handoff)**
+- [ ] API spec covers every field
 - [ ] validation rule per field
 - [ ] state shape + transition
-- [ ] ripple list — ทุกไฟล์ที่ต้องแก้พร้อมกัน
+- [ ] ripple list — every file that must be edited together
 
-**รับกลับจาก `ux` / `fe`** เมื่อขั้นถัดไปเจอช่องว่าง → ปรับ ER / acceptance criteria แล้วส่งใหม่
+**Receiving back from `ux` / `fe`** when next stage finds a gap → adjust ER / acceptance criteria and resend
 
 ---
 
-## หลักความรอบคอบขั้นสูงสุด (ใช้ทุก mode)
+## Maximum diligence principle (applies to all modes)
 
-**กฎทอง:** ห้ามแก้/แนะนำให้แก้จุดใดจุดหนึ่ง โดยไม่ได้ไล่ดูว่า "ใครอ้างถึงสิ่งนี้บ้าง" — แก้จุดเดียวแล้วไป bug อีกจุดคือความผิดพลาดที่ยอมรับไม่ได้
+**Golden rule:** never fix/recommend fixing a single point without tracing "who references this" — fixing one point and causing a bug elsewhere is an unacceptable mistake
 
-### Reference tracing checklist (ก่อนสรุป finding ทุกครั้ง)
+### Reference tracing checklist (before concluding any finding)
 
-ทุก symbol / function / type / state / route / schema:
-- [ ] grep ชื่อ symbol ทั้งโปรเจกต์ — `rg "name" --type ts --type vue` (อย่าหยุดที่ definition)
-- [ ] trace import chain — caller ของ caller (≥ 2 hop)
-- [ ] trace type usage — ทุก consumer
-- [ ] trace state mutation — ทุก mutate + read site
-- [ ] trace persistence — localStorage / cookie / DB / cache ที่ shape เปลี่ยน → corrupt ไหม?
-- [ ] trace cross-tab sync — `storage` event / WS / SSE consumer parse shape ใหม่ได้ไหม?
-- [ ] trace route gate — middleware ซ้ำชั้น defense-in-depth ที่ต้องแก้พร้อมกัน
+For every symbol / function / type / state / route / schema:
+- [ ] grep the symbol name across the whole project — `rg "name" --type ts --type vue` (do not stop at the definition)
+- [ ] trace the import chain — caller of caller (≥ 2 hops)
+- [ ] trace type usage — every consumer
+- [ ] trace state mutation — every mutate + read site
+- [ ] trace persistence — localStorage / cookie / DB / cache — does shape change corrupt it?
+- [ ] trace cross-tab sync — can `storage` event / WS / SSE consumers parse the new shape?
+- [ ] trace route gates — middleware layers (defense-in-depth) that must be changed together
 
-### Ripple questions (ตอบในใจก่อนสรุป — ตอบไม่ได้ = trace เพิ่ม)
+### Ripple questions (answer mentally before concluding — can't answer = trace more)
 
-1. เปลี่ยน field/shape — compile ผ่านทุก consumer ไหม? (TS จับได้ vs runtime-only)
-2. Rename/ย้ายไฟล์ — import path ครบไหม? (รวม dynamic/lazy)
-3. เปลี่ยน return shape — caller ที่ destructure ยัง work ไหม?
-4. เปลี่ยน validation — data เก่าใน DB/localStorage จะ fail rule ใหม่ไหม? (migration?)
-5. เพิ่ม guard — flow เก่าที่เคย pass จะ block โดยไม่ตั้งใจไหม?
-6. ลบ feature/field — มี dead code/import/type ที่ต้องลบตามไหม?
-7. แก้ component A — B ที่ wrap/extend A ยัง work ไหม?
-8. แก้ composable/store — ทุกหน้าที่ subscribe ยัง render ถูก?
-9. แก้ route handler — middleware ก่อนหน้า compatible? error shape ที่ FE คาดยังตรง?
-10. ปิดช่องโหว่ — fix สร้างช่องโหว่ใหม่ไหม? (sanitize → valid input fail; rate limit → block legitimate burst)
+1. Change field/shape — does it compile through every consumer? (TS-caught vs runtime-only)
+2. Rename/move file — are all import paths covered? (including dynamic/lazy)
+3. Change return shape — do destructuring callers still work?
+4. Change validation — will old data in DB/localStorage fail the new rule? (migration?)
+5. Add guard — will a previously passing flow get blocked unintentionally?
+6. Remove feature/field — is there dead code/import/type to remove too?
+7. Change component A — do B components that wrap/extend A still work?
+8. Change composable/store — do all subscribing pages still render correctly?
+9. Change route handler — is preceding middleware compatible? does the error shape FE expects still match?
+10. Close a vulnerability — does the fix create a new one? (sanitize → valid input fails; rate limit → blocks legitimate burst)
 
-### กฎเฉพาะที่ห้ามละเมิด
+### Rules that must not be violated
 
-- ห้ามสรุป **"ปลอดภัย / ไม่มี bug"** จากไฟล์เดียว — trace caller ≥ 1 hop เสมอ
-- ห้ามแนะนำให้แก้ field/type/schema **โดยไม่ list ทุก consumer** ที่ต้องแก้พร้อมกัน
-- ห้ามแนะนำ fix ที่ตอบ ripple 10 ข้อข้างบนไม่ได้
-- ห้ามรายงานช่องโหว่โดยไม่ verify ทุกชั้น (middleware + handler + frontend gate)
-- ถ้า trace แล้วซับซ้อนเกินคาด — บอก user ตรงๆ ก่อนสรุป
+- Never conclude **"safe / no bug"** from a single file — always trace caller ≥ 1 hop
+- Never recommend changing field/type/schema **without listing every consumer** that must change together
+- Never recommend a fix that cannot answer the 10 ripple questions above
+- Never report a vulnerability without verifying every layer (middleware + handler + frontend gate)
+- If tracing turns out more complex than expected — tell the user directly before concluding
 
 ---
 
 ## Mode A: Analyze (System Analyst)
 
-เป้าหมาย: ผลลัพธ์ที่ dev เอาไป implement ได้ทันที **ไม่ต้องตีความ**
+Goal: output that a dev can implement immediately **without interpretation**
 
-### ลำดับการคิด
+### Thinking order
 
-**0. Intent + simpler-way gate (ทำก่อน Step 1 เสมอ)**
+**0. Intent + simpler-way gate (always do before Step 1)**
 
-ก่อนเก็บ requirement / spec — ถาม 4 ทางเลือก + rationale 1 บรรทัดต่อข้อ:
+Before gathering requirement / spec — ask 4 alternatives + 1-line rationale each:
 
-- **Do nothing.** ปัญหา load-bearing จริงไหม? ไม่ทำมีต้นทุนอะไร?
-- **Use what already exists.** มี component / composable / endpoint / pattern เดิมใช้แทนได้ไหม? (cross-ref กับ project memory + `app/components/` + `app/composables/` + `service/`)
-- **Smaller scope.** แก้ 80% goal ด้วย 20% risk ได้ไหม?
+- **Do nothing.** Is the problem actually load-bearing? What's the cost of not doing it?
+- **Use what already exists.** Can an existing component / composable / endpoint / pattern be used instead? (cross-ref project memory + `app/components/` + `app/composables/` + `service/`)
+- **Smaller scope.** Can 80% of the goal be solved with 20% of the risk?
 - **Different layer.** config vs code, schema vs UI, middleware vs handler?
 
-มีทางเลือกที่ดีกว่า → **เสนอก่อน spec** + rationale; user ยืนยันสเปคเดิม จึงเข้า Step 1
-rationale ตอบไม่ได้ — บอก user ว่า underspecified, ถามก่อน
+Better alternative exists → **propose before spec** + rationale; if user confirms the original spec, then proceed to Step 1
+Can't produce a rationale — tell user it's underspecified, ask first
 
 **1–7.** Actor → Goal → Trigger → Main flow → Alternate/Exception → Data → Acceptance criteria (GWT)
 
-### Artifact ที่ output
+### Artifacts to output
 
 - User story `As a <actor>, I want <goal>, so that <reason>`
 - Use case (actor / precondition / main / alternate / postcondition)
@@ -125,102 +125,102 @@ rationale ตอบไม่ได้ — บอก user ว่า underspecifie
 
 ### Output style
 
-- mermaid สำหรับ diagram ทุกชนิด
-- ภาษาไทย สำหรับ business term; อังกฤษสำหรับ technical
+- mermaid for every diagram
+- Thai for business terms; English for technical
 - field name = camelCase
-- error message API = ไทย (ตาม pattern project)
+- API error messages = Thai (matching project pattern)
 
 ### Quality gates mode A
 
 - [ ] **Memory scanned** — quote relevant entries
-- [ ] **Simpler-way gate cleared** — 4 ทางเลือกมี rationale รับ/ปฏิเสธครบ
-- [ ] ทุก main flow มี alternate path สำหรับ error
-- [ ] ทุก field มี type + nullable + validation
-- [ ] ทุก API endpoint มี auth requirement ชัด
-- [ ] ทุก state transition มีเงื่อนไขชัดว่าใครเปลี่ยนได้
+- [ ] **Simpler-way gate cleared** — 4 alternatives have accept/reject rationale
+- [ ] every main flow has an alternate path for errors
+- [ ] every field has type + nullable + validation
+- [ ] every API endpoint has explicit auth requirement
+- [ ] every state transition has explicit condition for who can trigger it
 - [ ] edge cases: empty / max / concurrent / refresh mid-flow / unauthorized
-- [ ] **ripple check** — field/type ใหม่กระทบ consumer ที่ไหนบ้าง
-- [ ] **backward compat** — data เก่าใน storage shape เก่ามี migration/fallback?
-- [ ] **Update skill learnings** ถ้าเจอบทเรียน generalize ข้าม project (edge case pattern, state machine pitfall, question template)
-- [ ] ห้ามประกาศ "spec ครบ" ก่อนผ่าน checklist
+- [ ] **ripple check** — where do new field/type changes hit consumers
+- [ ] **backward compat** — old data in storage with old shape has migration/fallback?
+- [ ] **Update skill learnings** if a lesson generalizes across projects (edge case pattern, state machine pitfall, question template)
+- [ ] do not declare "spec complete" before passing the checklist
 
 ---
 
 ## Mode B: Audit (Security Review)
 
-เป้าหมาย: หา **ช่องโหว่จริงที่ exploit ได้** — ไม่ใช่ทฤษฎีลอยๆ
+Goal: find **real exploitable vulnerabilities** — not abstract theory
 
-### ลำดับการตรวจ
+### Audit order
 
-1. **Trust boundary** — input จาก client/external = untrusted
-2. **Authn / Authz** — authentication vs authorization แยกชั้น
+1. **Trust boundary** — input from client/external = untrusted
+2. **Authn / Authz** — separate authentication vs authorization layers
 3. **Input handling** — validate? sanitize? parameterize?
 4. **Output handling** — escape? content-type? CORS?
-5. **Secret** — เก็บที่ไหน, log ไหม, HTTPS only?
-6. **Dependency / Infra** — CVE? config เปิดเกินจำเป็น?
+5. **Secret** — where stored, logged?, HTTPS only?
+6. **Dependency / Infra** — CVE? config overexposed?
 
 ### Top 10 (OWASP-aligned)
 
-1. **Broken Access Control** — endpoint ลืม role check; IDOR (`/api/user/123` → 124)
-2. **Injection** — SQL/NoSQL/command/LDAP; template literal ต่อ user input ตรงๆ
-3. **XSS** — render HTML จาก user input; `v-html` / `dangerouslySetInnerHTML`
-4. **CSRF** — state-changing request ไม่มี token / SameSite cookie
-5. **SSRF** — fetch URL จาก user ไม่ allowlist
-6. **Auth flow** — JWT secret อ่อน; password hash อ่อน; session ไม่ rotate
-7. **Sensitive data exposure** — log token/password/PII; response leak field
-8. **Insecure deserialization** — `eval`, `Function()`, JSON.parse ใช้เป็น object โดยไม่ validate
-9. **Rate limiting / DoS** — login / OTP / search ไม่ throttle
-10. **Misconfiguration** — debug on prod; CORS `*`; cookie ไม่ `httpOnly`/`secure`/`sameSite`
+1. **Broken Access Control** — endpoint forgets role check; IDOR (`/api/user/123` → 124)
+2. **Injection** — SQL/NoSQL/command/LDAP; template literal concatenating user input directly
+3. **XSS** — render HTML from user input; `v-html` / `dangerouslySetInnerHTML`
+4. **CSRF** — state-changing request without token / SameSite cookie
+5. **SSRF** — fetch URL from user without allowlist
+6. **Auth flow** — weak JWT secret; weak password hash; session not rotated
+7. **Sensitive data exposure** — logs token/password/PII; response leaks fields
+8. **Insecure deserialization** — `eval`, `Function()`, JSON.parse used as object without validation
+9. **Rate limiting / DoS** — login / OTP / search not throttled
+10. **Misconfiguration** — debug on prod; CORS `*`; cookie missing `httpOnly`/`secure`/`sameSite`
 
-### Output style ต่อ finding
+### Output style per finding
 
 ```
 ### [Severity: Critical | High | Medium | Low | Info]
-**ช่องโหว่:** <ชื่อ + 1 ประโยค>
-**ที่ไหน:** `path/to/file.ts:42`
-**Attack scenario:** <สิ่งที่ attacker ทำได้จริง — เป็นรูปธรรม>
+**Vulnerability:** <name + 1 sentence>
+**Where:** `path/to/file.ts:42`
+**Attack scenario:** <what attacker can actually do — concrete>
 **Impact:** <data breach / account takeover / DoS / ...>
-**Fix:** <code-level — ไม่ใช่ "ใช้ library security">
+**Fix:** <code-level — not "use a security library">
 ```
 
-- Severity: Critical = exploit ได้ทันทีไม่ต้อง auth + ผลกระทบรุนแรง
-- ไม่เจอ → "ไม่พบช่องโหว่ระดับ X+ ใน scope ที่ตรวจ" + ระบุ scope
-- **ห้ามรายงาน false positive** เพื่อให้ดูครบ
+- Severity: Critical = exploitable immediately without auth + severe impact
+- None found → "No vulnerabilities at severity X+ in the scope audited" + state the scope
+- **Do not report false positives** to look thorough
 
 ### Quality gates mode B
 
 - [ ] **Memory scanned** — quote relevant security entries
-- [ ] trust boundary ทุกจุดที่รับ input (route, query, body, header, upload, queue)
-- [ ] auth gate ทุก protected route — middleware + handler-level (defense in depth)
+- [ ] trust boundary at every input point (route, query, body, header, upload, queue)
+- [ ] auth gate at every protected route — middleware + handler-level (defense in depth)
 - [ ] secret scan — `rg "password|secret|api[_-]key|token" --type ts --type vue`
 - [ ] dependency version — `yarn audit` / `npm audit`
-- [ ] ทุก finding: file:line + attack scenario + implementable fix
-- [ ] **trace caller** — verify ไม่มี gate ชั้นบน mitigate อยู่ก่อน (กัน false positive)
-- [ ] **ripple ของ fix** — ไม่สร้างช่องโหว่ใหม่ / ไม่ break legitimate flow
-- [ ] **ทุก path คู่ขนาน** ตรวจครบ (`/api/user/[id]` vs `/api/admin/user/[id]`)
-- [ ] **Cross-verify scan** — ≥ 2 regex (หลวม + เข้ม) ผลตรงกัน
-- [ ] **Skill learnings updated** ถ้าเจอ OWASP pitfall / attack pattern / detection ใหม่
-- [ ] ห้ามประกาศ "ปลอดภัย / ไม่มีช่องโหว่" ก่อนผ่าน checklist
+- [ ] every finding: file:line + attack scenario + implementable fix
+- [ ] **trace caller** — verify no upper-layer gate already mitigates it (avoid false positive)
+- [ ] **ripple of fix** — does not create new vulnerability / does not break legitimate flow
+- [ ] **every parallel path** audited (`/api/user/[id]` vs `/api/admin/user/[id]`)
+- [ ] **Cross-verify scan** — ≥ 2 regex (loose + strict) agree
+- [ ] **Skill learnings updated** if you find a new OWASP pitfall / attack pattern / detection
+- [ ] do not declare "safe / no vulnerability" before passing the checklist
 
 ---
 
-## เลือก mode ยังไง
+## How to pick a mode
 
 | Trigger | Mode |
 |---|---|
 | "วิเคราะห์ requirement", "spec", "use case", "flow" | A |
-| "ทำหน้าใหม่ที่ยังไม่รู้ field" | A (ก่อน ux + fe) |
+| "ทำหน้าใหม่ที่ยังไม่รู้ field" | A (before ux + fe) |
 | "ตรวจ security", "audit auth", "หา vulnerability" | B |
 | "ปลอดภัยพอไหม", "พร้อม prod ไหม" | B (+ infra checklist) |
-| ครอบคลุมทั้งคู่ | A → B |
+| Covers both | A → B |
 
 ---
 
-## ห้ามทำ
+## Do not
 
-- ❌ **implement code** — skill นี้คิด/ตรวจอย่างเดียว
-- ❌ **output ลอยๆ** — ทุก artifact อ้างอิง file/route/entity จริง
-- ❌ **รายงานช่องโหว่ที่ไม่ verify** — ระบุว่า "ต้องตรวจเพิ่ม" + อะไร
-- ❌ **ใช้คำคลุมเครือ** — "อาจมีปัญหา" → ระบุ อะไร / ที่ไหน / ผลกระทบ
-- ❌ **สรุปจากไฟล์เดียว** — caller-trace ≥ 1 hop เสมอ
-- ❌ **เสนอ fix shallow** — list ทุก consumer ที่ต้องแก้พร้อมกัน
+- ❌ **implement code** — this skill only thinks/audits
+- ❌ **abstract output** — every artifact must reference a real file/route/entity
+- ❌ **report unverified vulnerability** — say "needs further check" + what
+- ❌ **use vague wording** — "may have a problem" → state what / where / impact
+- ❌ **conclude from a single file** — always caller-trace ≥ 1 hop
+- ❌ **propose shallow fix** — list every consumer that must change together

@@ -1,26 +1,26 @@
 # Learnings — fe
 
-> **Per-skill, cross-project memory** — บทเรียนของ skill `fe` ที่ใช้ได้ข้ามทุก project Vue/Nuxt/React/TypeScript
+> **Per-skill, cross-project memory** — lessons for skill `fe` that apply across every Vue/Nuxt/React/TypeScript project
 >
-> **เก็บอะไรที่นี่:**
-> - Vue 3 / Nuxt (v3 + v4) reactivity pitfall (ตัวอย่าง: destructure reactive object, watch on ref vs reactive, computed ที่ side-effect)
-> - TypeScript pattern (generics, type narrowing, infer)
-> - valibot schema convention (เช่น `InferInput` vs `InferOutput` ตอนไหนใช้ไหน)
-> - Nuxt UI component quirk (UButton color/variant, UModal slot, USelect items shape) — ระบุ version ใน entry ถ้า quirk เฉพาะ version
-> - Pinia / composable convention ที่ใช้ซ้ำได้ทุก project
-> - Anti-pattern ที่เคยเขียนแล้วต้อง refactor (เช่น prop drilling deep, useState ผิดที่)
+> **Store here:**
+> - Vue 3 / Nuxt (v3 + v4) reactivity pitfalls (e.g., destructure reactive object, watch on ref vs reactive, computed with side effect)
+> - TypeScript patterns (generics, type narrowing, infer)
+> - valibot schema conventions (e.g., `InferInput` vs `InferOutput` — when to use which)
+> - Nuxt UI component quirks (UButton color/variant, UModal slot, USelect items shape) — note version in entry if quirk is version-specific
+> - Pinia / composable conventions reusable across projects
+> - Anti-patterns once written and later refactored (e.g., deep prop drilling, useState in wrong place)
 >
-> **ไม่เก็บที่นี่:**
-> - Convention เฉพาะ project (เช่น "โปรเจกต์นี้ใช้ shared/schemas/" → project memory)
-> - Path / file structure เฉพาะ codebase
-> - Business term ของ project นั้นๆ
+> **Don't store here:**
+> - Project-specific conventions (e.g., "this project uses shared/schemas/" → project memory)
+> - Codebase-specific paths / file structure
+> - Project-specific business terms
 >
-> **เมื่อไหร่อ่าน:** ทุกครั้งใน Pre-flight ของ skill `fe`
-> **เมื่อไหร่ append:** หลังจบงานถ้าเจอบทเรียน generalize ได้ (ดู format ใน `_template/learnings.md`)
+> **When to read:** every time during Pre-flight of skill `fe`
+> **When to append:** after a task if a generalizable lesson appears (see format in `_template/learnings.md`)
 
 ---
 
-## Format ต่อ entry
+## Entry format
 
 ```markdown
 ## <kebab-case-slug>
@@ -28,41 +28,41 @@
 **Tags:** keyword1, keyword2, keyword3
 **Date:** YYYY-MM-DD
 
-**Context:** สิ่งที่ทำตอนเจอบทเรียน — **1 บรรทัดเท่านั้น**
-**Lesson:** กฎ + เหตุผล
-**How to apply:** ทำยังไงครั้งหน้า
+**Context:** what you were doing when the lesson appeared — **1 line only**
+**Lesson:** rule + reason
+**How to apply:** what to do next time
 ```
 
 ---
 
 ## Entries
 
-<!-- ใหม่สุดอยู่บน -->
+<!-- newest on top -->
 
 ## select-item-value-must-not-be-empty-string
 
 **Tags:** nuxt-ui, reka-ui, USelect, USelectMenu, runtime-error
 **Date:** 2026-05-16
 
-**Context:** ใช้ `USelect` / `USelectMenu` แล้ว throw `SelectItem must have a value prop that is not an empty string` ตอน mount
-**Lesson:** Reka UI (เบื้องหลังของ Nuxt UI v3+ select component) ห้าม `value: ''` ใน `items` array เพราะ empty string สงวนไว้สำหรับ "no selection" ภายใน Radix/Reka — ถ้าใส่ `''` runtime จะ throw ทันที
+**Context:** used `USelect` / `USelectMenu` and got `SelectItem must have a value prop that is not an empty string` thrown at mount
+**Lesson:** Reka UI (the engine behind Nuxt UI v3+ select components) forbids `value: ''` in `items` array because empty string is reserved for "no selection" inside Radix/Reka — passing `''` throws at runtime immediately
 **How to apply:**
-- ห้ามใช้ `''` เป็น placeholder option — ใช้ `null`, `undefined`, หรือ omit ไปเลยแทน
-- ถ้าต้องการ "ทุกค่า / all" → ใช้ string sentinel ที่ไม่ใช่ `''` เช่น `'__ALL__'`
-- ตอน migrate native `<select>` ที่มี `<option value="">` → map เป็น `null` ก่อนใส่ items
-- Scan ทั้ง single + double quote: `rg "value: ['\"]['\"]"` ก่อนคิดว่า safe
+- Never use `''` as a placeholder option — use `null`, `undefined`, or omit it entirely instead
+- For "any value / all" → use a string sentinel that isn't `''`, e.g. `'__ALL__'`
+- When migrating native `<select>` with `<option value="">` → map to `null` before passing into items
+- Scan both single + double quote: `rg "value: ['\"]['\"]"` before assuming safe
 
 ## slot-existence-not-reactive-in-template-vif
 
 **Tags:** vue3, slot, reactivity, template
 **Date:** 2026-05-16
 
-**Context:** ใช้ `<template v-if="$slots.actions">...</template>` เพื่อ render section เฉพาะเมื่อมี slot — แต่ section หาย/โผล่ผิดเวลาในบาง render
-**Lesson:** Vue 3 `$slots.<name>` ไม่ reliably reactive ใน `<template v-if>` — มันคือ object reference ที่ Vue ไม่ track เป็น dep ของ effect ปกติ ทำให้ re-evaluate ไม่ทันเมื่อ parent re-render
+**Context:** used `<template v-if="$slots.actions">...</template>` to render a section only when the slot exists — but the section disappears/appears at the wrong time on some renders
+**Lesson:** Vue 3 `$slots.<name>` is not reliably reactive inside `<template v-if>` — it's an object reference Vue does not track as a dep of normal effects, so it fails to re-evaluate when parent re-renders
 **How to apply:**
-- อย่าใช้ `v-if="$slots.X"` เพื่อ branch UI สำคัญ
-- ถ้าต้องเช็ค slot existence — ใช้ `computed(() => !!slots.X)` ใน `<script setup>` แล้ว reference computed นั้นใน template
-- หรือ design ให้ parent ส่ง prop `:showActions="boolean"` ชัด ๆ แทนเช็ค slot
+- Don't use `v-if="$slots.X"` to branch important UI
+- If you must check slot existence — use `computed(() => !!slots.X)` in `<script setup>` and reference that computed in the template
+- Or design the parent to pass an explicit `:showActions="boolean"` prop instead of probing slots
 
 
 ## destructure-reactive-loses-reactivity
@@ -70,15 +70,15 @@
 **Tags:** vue3, reactive, ref, composable, reactivity
 **Date:** 2026-05-16
 
-**Context:** เขียน composable ที่ return `reactive({ count, items })` แล้ว consumer `const { count } = useFoo()` — UI ไม่ update ตอน count เปลี่ยน
-**Lesson:** Destructure ตัวออกจาก `reactive()` ทำให้ได้ "primitive snapshot" — สาย reactive ขาดทันที (Vue track proxy ของ object ไม่ใช่ value ที่ destructure ออกมา)
+**Context:** wrote a composable that returns `reactive({ count, items })` then a consumer did `const { count } = useFoo()` — UI doesn't update when count changes
+**Lesson:** Destructuring a value out of `reactive()` yields a "primitive snapshot" — the reactive link breaks immediately (Vue tracks the proxy of the object, not the value destructured out)
 **How to apply:**
-- Composable return `reactive({...})` → consumer ต้อง destructure ผ่าน `toRefs()` หรือ `toRef()`
+- Composable returns `reactive({...})` → consumer must destructure via `toRefs()` or `toRef()`
   ```ts
   // ❌ const { count } = useFoo()
   // ✅ const { count } = toRefs(useFoo())
   // ✅ const count = toRef(useFoo(), 'count')
   ```
-- Best practice: composable return `refs` ตรงๆ ตั้งแต่ต้น — `return { count: ref(0), items: ref([]) }` แทน `reactive({...})` — consumer destructure ได้ตรง ๆ ไม่ต้อง toRefs
-- React equivalent pitfall: ส่ง `{...state}` เข้า useState — primitive snapshot คนละแบบ แต่ปัญหา conceptual คล้ายกัน
+- Best practice: composable returns `refs` directly from the start — `return { count: ref(0), items: ref([]) }` instead of `reactive({...})` — consumers can destructure straight without toRefs
+- React equivalent pitfall: passing `{...state}` into useState — different primitive snapshot, but conceptually similar problem
 

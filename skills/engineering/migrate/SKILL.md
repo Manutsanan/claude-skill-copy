@@ -5,105 +5,105 @@ description: Use for bulk transformations / migrations across many files — con
 
 # migrate — Bulk transformation orchestrator
 
-ใช้กับงานที่ **แตะหลายไฟล์ตาม pattern ซ้ำๆ** — บังคับ Discover → Plan → Execute → Cross-verify ตามลำดับ ห้าม shortcut
+Use on tasks that **touch many files following a repeating pattern** — enforce Discover → Plan → Execute → Cross-verify in order, no shortcut
 
-**กฎหลัก:** "ใจร้อนแก้ทีละจุด" คือ root cause ของ migration พลาดเกือบทุกครั้ง
+**Core rule:** "impatient point-fix" is the root cause of nearly every failed migration
 
 ---
 
 ## Phase 0 & 0.5 — Memory load
 
-Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
-- **Memory filter:** `metadata.skill: migrate | cross` + target pattern keyword (เช่น `USelect`, `valibot`, `wrapper-element`)
-- **Learnings filter:** อ่าน `~/.claude/skills/migrate/learnings.md` เฉพาะ entry ที่ Tags match keyword (max 5); ไม่มี match → "fresh — Discover ละเอียดเป็นพิเศษ"
-- **Conflict check:** ถ้า migration ขัด memory → หยุดถาม user
-- **Save triggers:** ตาม 8 universal triggers — เน้น "pattern + regex + gotcha" ที่ generalize ได้
+Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
+- **Memory filter:** `metadata.skill: migrate | cross` + target pattern keyword (e.g. `USelect`, `valibot`, `wrapper-element`)
+- **Learnings filter:** read `~/.claude/skills/migrate/learnings.md` only for entries whose Tags match keyword (max 5); no match → "fresh — be extra thorough in Discover"
+- **Conflict check:** if migration conflicts with memory → stop and ask user
+- **Save triggers:** per the 8 universal triggers — emphasize "pattern + regex + gotcha" that generalize
 
 ---
 
 ## Handoff
 
-**รับจาก `sa`** (ถ้ามี): target pattern + reason + ripple list
+**Receive from `sa`** (if any): target pattern + reason + ripple list
 
-**ส่งให้ `fe`**: file:line ที่ migrate แบบ mechanical ไม่ได้ + edge case + suggestion
+**Hand to `fe`**: file:line that cannot be migrated mechanically + edge case + suggestion
 
-**Yield กลับ `sa`** เมื่อ migration กระทบ data model / API contract / ต้องการ data migration script
+**Yield back to `sa`** when migration affects data model / API contract / requires data migration script
 
-**ทำเองได้** เมื่อ pattern mechanical + ไม่กระทบ logic + verify ผ่านทุก batch
+**Do it solo** when pattern is mechanical + does not affect logic + every batch verifies clean
 
 ---
 
-## ลำดับการคิด (ห้าม skip ขั้นใด)
+## Order of thinking (do not skip any phase)
 
 ### Phase 0 — Discover & Scope
 
-1. **Scan ด้วย ≥ 2 patterns** (หลวม + เข้ม) — ผลต้องตรงกัน (ไม่ตรง = regex เข้มผิด)
-2. List ไฟล์ทั้งหมด + count per file
-3. **จำแนกประเภท:** pattern เดียวกันหรือหลายแบบ? mechanical หรือ context-dependent?
-4. **Map dependencies:** ไฟล์ไหนอ้างไฟล์ไหน, ลำดับแก้ต้องเป็นยังไง
+1. **Scan with ≥ 2 patterns** (loose + strict) — results must match (mismatch = strict regex wrong)
+2. List all files + count per file
+3. **Classify:** single pattern or multiple shapes? mechanical or context-dependent?
+4. **Map dependencies:** which files reference which, what edit order is required
 
 ### Phase 1 — Plan
 
-1. **เสนอแผนเป็น phase ให้ user เห็นก่อนเริ่ม:**
-   - Phase A: low-risk / dead code (ลองวิธีบน scope เล็ก)
+1. **Propose plan as phases to user before starting:**
+   - Phase A: low-risk / dead code (trial the approach on a small scope)
    - Phase B: active production
    - Phase C: edge cases / context-dependent
-2. ระบุ **verify step** ของแต่ละ phase
-3. **ขอ confirm** ถ้า scope > 10 ไฟล์ หรือกระทบ shared code
+2. State the **verify step** of each phase
+3. **Ask for confirm** if scope > 10 files or touches shared code
 
 ### Phase 2 — Execute by batch
 
-ทีละ batch (ไม่ใช่ทีละไฟล์ ไม่ใช่ทั้งหมดรวด):
+One batch at a time (not one file at a time, not the whole set in one shot):
 
-1. Migrate **3–5 ไฟล์** ใน batch แรก
-2. **Verify ทันทีหลัง batch:**
-   - `tsc --noEmit` (ถ้า TS)
+1. Migrate **3–5 files** in the first batch
+2. **Verify immediately after batch:**
+   - `tsc --noEmit` (if TS)
    - `curl http://localhost:3000/<page>` HTTP 200
-   - dev log ไม่มี error/warn ใหม่
-3. Error → หยุด, fix, แล้วค่อย batch ต่อ
-4. OK → batch ถัดไป
+   - dev log has no new error/warn
+3. Error → stop, fix, then proceed to next batch
+4. OK → next batch
 
 ### Phase 3 — Cross-verify final
 
-1. **Re-scan** ด้วย pattern เดิม (หลวม + เข้ม) — ผลต้อง = 0 ทั้งคู่
-2. **Manual spot-check 2–3 ไฟล์** — อ่านจริงยืนยัน
-3. **Build full** — `nuxt build` / `tsc --noEmit` ทั้งโปรเจกต์ pass
-4. **Update memory** — pattern + regex + gotcha ที่เจอ
+1. **Re-scan** with the same patterns (loose + strict) — both must = 0
+2. **Manual spot-check 2–3 files** — read them and confirm
+3. **Build full** — `nuxt build` / `tsc --noEmit` across the whole project passes
+4. **Update memory** — pattern + regex + gotcha encountered
 
 ---
 
 ## Tools / techniques
 
-**Bulk regex replace** (Bash + node script) — ใช้เมื่อ pattern เหมือนทุกจุด + จะต้อง Edit > 30 ครั้ง
+**Bulk regex replace** (Bash + node script) — use when pattern is identical at every site + would require > 30 Edit calls
 
-กฎ: ทุก script ต้อง (1) print "files modified" + "matches replaced", (2) run 1 ไฟล์ก่อน verify, (3) git commit/stash ก่อนรัน
+Rule: every script must (1) print "files modified" + "matches replaced", (2) run on 1 file first to verify, (3) git commit/stash before running
 
-**Edit tool** — เมื่อ context-dependent หรือ < 10 จุด
+**Edit tool** — when context-dependent or < 10 sites
 
-**Explore agent** — discover phase ที่ scope ใหญ่ (เร็วกว่า grep ทีละครั้ง)
-
----
-
-## Anti-patterns (เคยพังมาแล้ว)
-
-- ❌ **Edit ทีละจุดโดยไม่ scan ก่อน** → ตกหล่นเสมอ; บังคับ Discover ก่อน Plan ก่อน Execute
-- ❌ **Regex pattern เดียวเช็คผล** → `<tag[ >]` miss multi-line attrs; cross-verify หลวม + เข้มเสมอ
-- ❌ **ลบ wrapper element ครึ่งทาง** → เหลือ `</div>` ค้าง = "Invalid end tag"; Edit ที่รวม open + close + content เป็น `old_string` เดียว
-- ❌ **Migrate Reka UI item ด้วย `value=""` / `value: ''`** → runtime error; scan ทั้ง single + double quote, เปลี่ยนเป็น `null` / sentinel
-- ❌ **เคลม "0 left" จาก scan รอบเดียว** → quality gates ทุกข้อก่อนเคลม
+**Explore agent** — discover phase at large scope (faster than grep one-by-one)
 
 ---
 
-## Quality gates (ก่อนปิดงาน)
+## Anti-patterns (already burned by these)
 
-- [ ] **Memory scanned + updated** ถ้าเจอ pattern/gotcha ใหม่
-- [ ] **Discover ครบ** — ≥ 2 regex patterns ผลตรงกัน
-- [ ] **Per-batch verify ผ่าน** — `tsc --noEmit` + Vite compile + dev log clean ทุก batch
-- [ ] **Final re-scan = 0** (หลวม + เข้ม)
-- [ ] **Manual spot-check 2–3 ไฟล์**
+- ❌ **Edit one site at a time without scanning first** → always miss some; enforce Discover → Plan → Execute
+- ❌ **Verify with a single regex pattern** → `<tag[ >]` misses multi-line attrs; always cross-verify loose + strict
+- ❌ **Delete wrapper element halfway** → orphan `</div>` left = "Invalid end tag"; Edit must combine open + close + content into a single `old_string`
+- ❌ **Migrate Reka UI item with `value=""` / `value: ''`** → runtime error; scan both single + double quote, replace with `null` / sentinel
+- ❌ **Claim "0 left" from a single scan pass** → run all quality gates before claiming
+
+---
+
+## Quality gates (before closing the task)
+
+- [ ] **Memory scanned + updated** if any new pattern/gotcha
+- [ ] **Discover complete** — ≥ 2 regex patterns with matching results
+- [ ] **Per-batch verify passed** — `tsc --noEmit` + Vite compile + dev log clean for every batch
+- [ ] **Final re-scan = 0** (loose + strict)
+- [ ] **Manual spot-check 2–3 files**
 - [ ] **Build full success**
-- [ ] **Skill learnings updated** ถ้า regex/AST/batch-size/recovery technique generalize ได้ → append `learnings.md`
-- [ ] **ห้ามเคลม "เสร็จ / ครบ / 0 left"** จาก scan รอบเดียว — user ต้องสั่ง "ตรวจอีก" = scan แรกไม่ดีพอ
+- [ ] **Skill learnings updated** if regex/AST/batch-size/recovery technique generalizes → append `learnings.md`
+- [ ] **Do not claim "done / complete / 0 left"** from a single scan — if user has to say "check again" then the first scan was insufficient
 
 ---
 
@@ -111,15 +111,15 @@ Extend Universal Phase 0 (ดู `~/.claude/CLAUDE.md`):
 
 ```markdown
 ### Phase 0 — Discover
-- Scope: 34 จุด ใน 13 ไฟล์
-- Pattern types: 2 แบบ (filter / form field)
+- Scope: 34 sites across 13 files
+- Pattern types: 2 shapes (filter / form field)
 
 ### Phase 1 — Plan
-- Batch A (dead code, 7 ไฟล์)
-- Batch B (active production, 6 ไฟล์)
+- Batch A (dead code, 7 files)
+- Batch B (active production, 6 files)
 
 ### Phase 2 — Execute Batch A
-- ✓ Migrated 3 ไฟล์
+- ✓ Migrated 3 files
 - ✓ tsc passes
 - ✓ curl /xxx HTTP 200
 - → Batch B

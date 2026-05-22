@@ -1,29 +1,29 @@
 # Learnings — audit
 
-> **Per-skill, cross-project memory** — บทเรียนของ audit ที่ใช้ได้ข้ามทุก project
+> **Per-skill, cross-project memory** — audit lessons usable across every project
 >
-> **ต่างจาก project memory ยังไง?**
-> | | Project memory (`~/.claude/projects/<id>/memory/`) | Skill learnings (ไฟล์นี้) |
+> **How does this differ from project memory?**
+> | | Project memory (`~/.claude/projects/<id>/memory/`) | Skill learnings (this file) |
 > |---|---|---|
-> | Scope | เฉพาะ project นั้น | ข้ามทุก project ที่ใช้ audit |
-> | เนื้อหา | "finding X user accept แล้วว่าตั้งใจ" | "default heuristic ของ audit / pitfall / false-positive pattern" |
-> | ตัวอย่าง | "intentional dead code ใน legacy/ — กำลัง migrate" | "Vue test ที่ assert toBe(true) มัก weak ทุก project" |
+> | Scope | only that project | across every project using audit |
+> | Content | "finding X user accepted as intentional" | "audit default heuristic / pitfall / false-positive pattern" |
+> | Example | "intentional dead code in legacy/ — being migrated" | "Vue tests asserting toBe(true) are usually weak in every project" |
 >
-> **เมื่อไหร่ append entry ใหม่:**
-> - หลังจบงาน audit ทุกครั้ง **ถ้า** เจอ:
->   - heuristic ที่ใช้ซ้ำได้ — เช่น "ทุก Nuxt project มัก bloat จาก full lodash"
->   - false-positive pattern — เช่น "vue-tsc ไม่นับ `<script setup>` macros เป็น caller → trace ผิด"
->   - default tool choice ที่ work ดี — เช่น "`pnpm why` ดีกว่า `pnpm ls` สำหรับ duplicate transitive"
->   - signal ที่ flag ดีกว่าวิธีเดิม
-> - **อย่า append** business rule / user preference ของ project ใด project หนึ่ง (อันนั้น → project memory)
+> **When to append a new entry:**
+> - After every audit run **if** you found:
+>   - a reusable heuristic — e.g. "every Nuxt project tends to bloat from full lodash"
+>   - a false-positive pattern — e.g. "vue-tsc doesn't count `<script setup>` macros as callers → wrong trace"
+>   - a default tool choice that works well — e.g. "`pnpm why` beats `pnpm ls` for duplicate transitive"
+>   - a signal that flags better than the previous method
+> - **Do not append** business rules / user preferences for a single project (those → project memory)
 >
-> **เมื่อไหร่อ่าน:** ทุกครั้งใน Phase 0.5 — grep tag/keyword ของ stack ที่ตรวจเจอใน Phase 1 → apply ก่อนเริ่ม scan
+> **When to read:** every time in Phase 0.5 — grep tags/keywords of the stack detected in Phase 1 → apply before starting scan
 >
-> **Pruning:** entry ที่ล้าสมัย (tool ถูก deprecate, framework เปลี่ยน API) → ลบหรือ mark `~~deprecated~~`
+> **Pruning:** stale entries (tool deprecated, framework API changed) → delete or mark `~~deprecated~~`
 
 ---
 
-## Format ต่อ entry
+## Format per entry
 
 ```markdown
 ## <kebab-case-slug>
@@ -31,28 +31,29 @@
 **Tags:** keyword1, keyword2, keyword3
 **Date:** YYYY-MM-DD
 
-**Context:** สถานการณ์ที่เจอบทเรียน (1-2 บรรทัด)
-**Lesson:** กฎ + เหตุผลสั้น ๆ ว่าทำไม
-**How to apply:** ทำยังไงครั้งหน้าเมื่อเจอสถานการณ์คล้ายกัน
-**Related:** [[other-learning-slug]] หรือ link ไป project memory ถ้ามี
+**Context:** situation where the lesson came up (1-2 lines)
+**Lesson:** rule + short reason why
+**How to apply:** what to do next time when a similar situation arises
+**Related:** [[other-learning-slug]] or link to project memory if any
 ```
 
 ---
 
 ## Entries
 
-<!-- ใหม่สุดอยู่บน — append entry ใหม่ที่นี่ -->
+<!-- newest on top — append new entries here -->
 
-<!-- ตัวอย่าง (ลบเมื่อมี entry จริง):
+<!-- example (delete when real entries exist):
 
 ## full-lodash-import-bloat-pattern
 
 **Tags:** performance, bundle, lodash, vue, nuxt
+
 **Date:** 2026-05-18
 
-**Context:** scan Nuxt 4 project แล้วเจอ `import _ from 'lodash'` 30+ ไฟล์ทำให้ initial bundle +71KB
-**Lesson:** เกือบทุก Vue/Nuxt project ที่เคย audit มี pattern นี้ — `lodash` whole import ใช้แค่ 1-2 ฟังก์ชัน
-**How to apply:** Phase 2 dimension Performance — เริ่มจาก `rg "import \w+ from ['\"]lodash['\"]"` (ไม่ใช่ `lodash-es`) เป็นอันดับแรก
-**Related:** project memory ของ project ที่ user accept ไว้ว่า "ตั้งใจ"
+**Context:** scanned a Nuxt 4 project and found `import _ from 'lodash'` in 30+ files, adding +71KB to initial bundle
+**Lesson:** nearly every Vue/Nuxt project audited has this pattern — `lodash` whole import used for only 1-2 functions
+**How to apply:** Phase 2 dimension Performance — start with `rg "import \w+ from ['\"]lodash['\"]"` (not `lodash-es`) as the first scan
+**Related:** project memory of projects where user accepted it as "intentional"
 
 -->
