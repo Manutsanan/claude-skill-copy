@@ -221,11 +221,35 @@ cd ~/Project/claude-skill-copy
 | 2 | ติดตั้ง `~/.claude/CLAUDE.md` จาก template (skip ถ้ามี — `--force` = backup เก่าก่อน) |
 | 3 | ติดตั้ง `~/.claude/RTK.md` (เหมือนกัน) |
 | 4 | สร้าง `~/.claude/memory/` + `~/.claude/projects/` (เปล่า) |
-| 5 | Print next steps |
+| 5 | ติดตั้ง lint tooling — venv + PyYAML + symlink scripts/hook + register PostToolUse hook (ต้องมี `python3` + `jq`; skip ถ้าไม่มี) |
+| 6 | Print next steps |
 
 **Flags:**
 - `--force` — overwrite `CLAUDE.md` / `RTK.md` (backup เก่าเป็น `*.bak.YYYY-MM-DD`)
 - `--skip-link` — ข้าม symlink (ถ้า link เองแล้ว)
+
+### Lint tooling (skill + memory frontmatter validator)
+
+`setup.sh` ติดตั้ง lint script ที่ตรวจสุขภาพของ skill/memory files หลังทุก Edit/Write (warn-only — ไม่ block edit)
+
+**ตรวจอะไร:**
+- Frontmatter parse ได้ (strict YAML → lenient fallback สำหรับ prose ที่มี `: `)
+- Required fields (`name`, `description`) ครบ
+- `metadata.type` ∈ `{user, feedback, project, reference}`
+- `metadata.skill` ∈ `{fe, ux, sa, debug, migrate, audit, cross}`
+- `metadata.scope` ∈ `{global, project}`
+- `name` เป็น kebab-case + ตรงกับ filename (normalize `_` ↔ `-`)
+- Skill folder มี `SKILL.md` + symlink target มีอยู่จริง
+- MEMORY.md index ตรงกับไฟล์บน disk
+- ไม่มี orphan `[[link]]` ใน memory body
+
+**Manual run:**
+```bash
+~/.claude/scripts/lint-skills.py              # full sweep (skills + global + project memories)
+~/.claude/scripts/lint-skills.py PATH         # specific file or directory
+```
+
+**Hook behavior:** PostToolUse fire เฉพาะเมื่อ Edit/Write/NotebookEdit touch path ที่ขึ้นต้นด้วย `~/.claude/skills/`, `~/.claude/memory/`, หรือ `~/.claude/projects/*/memory/` — exit 0 เสมอ ถ้ามี warning/error จะ print ผ่าน stderr ให้ user เห็นใน Claude Code transcript
 
 ### Verify install
 

@@ -100,6 +100,100 @@ for d in "$HOME_CLAUDE/memory" "$HOME_CLAUDE/projects"; do
   fi
 done
 
+# ---------- 5. Lint tooling ----------
+#
+# Installs:
+#   - Python venv at ~/.claude/scripts/.venv with PyYAML
+#   - Symlinks scripts/lint-skills.py and hooks/lint-on-edit.sh into ~/.claude
+#   - Registers PostToolUse hook in ~/.claude/settings.json (idempotent merge)
+#
+# Lint surfaces frontmatter drift, broken symlinks, missing required files,
+# enum typos, MEMORY.md sync gaps, and orphan [[links]]. Warn-only — never
+# blocks an edit. Skip cleanly if python3 or jq is missing.
+
+note "Installing lint tooling (skill + memory frontmatter validator)"
+
+LINT_VENV="$HOME_CLAUDE/scripts/.venv"
+LINT_SCRIPT_SRC="$REPO/scripts/lint-skills.py"
+LINT_SCRIPT_DST="$HOME_CLAUDE/scripts/lint-skills.py"
+LINT_HOOK_SRC="$REPO/hooks/lint-on-edit.sh"
+LINT_HOOK_DST="$HOME_CLAUDE/hooks/lint-on-edit.sh"
+SETTINGS="$HOME_CLAUDE/settings.json"
+
+if ! command -v python3 &>/dev/null; then
+  warn "python3 not found — skipping lint install (skills will still work)"
+elif ! command -v jq &>/dev/null; then
+  warn "jq not found — skipping lint install (needed for hook registration)"
+else
+  mkdir -p "$HOME_CLAUDE/scripts" "$HOME_CLAUDE/hooks"
+
+  # 5a. Venv + PyYAML
+  if [ -x "$LINT_VENV/bin/python" ]; then
+    ok "Venv already exists: $LINT_VENV"
+  else
+    python3 -m venv "$LINT_VENV"
+    ok "Created venv: $LINT_VENV"
+  fi
+
+  if "$LINT_VENV/bin/python" -c "import yaml" 2>/dev/null; then
+    ok "PyYAML already installed in venv"
+  else
+    "$LINT_VENV/bin/pip" install --quiet pyyaml
+    ok "Installed PyYAML in venv"
+  fi
+
+  # 5b. Symlink lint script + hook
+  if [ -L "$LINT_SCRIPT_DST" ] && [ "$(readlink "$LINT_SCRIPT_DST")" = "$LINT_SCRIPT_SRC" ]; then
+    ok "lint-skills.py already linked"
+  elif [ -e "$LINT_SCRIPT_DST" ] && [ ! -L "$LINT_SCRIPT_DST" ]; then
+    warn "lint-skills.py exists at $LINT_SCRIPT_DST but is not a symlink — leaving alone (run with --force to overwrite)"
+    if [ "$FORCE" -eq 1 ]; then
+      cp "$LINT_SCRIPT_DST" "$LINT_SCRIPT_DST.bak.$(date +%Y-%m-%d)"
+      ln -snf "$LINT_SCRIPT_SRC" "$LINT_SCRIPT_DST"
+      ok "lint-skills.py replaced with symlink (backup saved)"
+    fi
+  else
+    ln -snf "$LINT_SCRIPT_SRC" "$LINT_SCRIPT_DST"
+    ok "Linked lint-skills.py -> $LINT_SCRIPT_SRC"
+  fi
+
+  if [ -L "$LINT_HOOK_DST" ] && [ "$(readlink "$LINT_HOOK_DST")" = "$LINT_HOOK_SRC" ]; then
+    ok "lint-on-edit.sh already linked"
+  elif [ -e "$LINT_HOOK_DST" ] && [ ! -L "$LINT_HOOK_DST" ]; then
+    warn "lint-on-edit.sh exists at $LINT_HOOK_DST but is not a symlink — leaving alone (run with --force to overwrite)"
+    if [ "$FORCE" -eq 1 ]; then
+      cp "$LINT_HOOK_DST" "$LINT_HOOK_DST.bak.$(date +%Y-%m-%d)"
+      ln -snf "$LINT_HOOK_SRC" "$LINT_HOOK_DST"
+      ok "lint-on-edit.sh replaced with symlink (backup saved)"
+    fi
+  else
+    ln -snf "$LINT_HOOK_SRC" "$LINT_HOOK_DST"
+    ok "Linked lint-on-edit.sh -> $LINT_HOOK_SRC"
+  fi
+
+  # 5c. Register PostToolUse hook in settings.json (idempotent merge)
+  if [ ! -f "$SETTINGS" ]; then
+    echo '{"hooks":{}}' > "$SETTINGS"
+    ok "Created $SETTINGS"
+  fi
+
+  if jq -e --arg cmd "$LINT_HOOK_DST" '.hooks.PostToolUse // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' "$SETTINGS" >/dev/null 2>&1; then
+    ok "PostToolUse hook already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$LINT_HOOK_DST" '
+      .hooks //= {} |
+      .hooks.PostToolUse //= [] |
+      .hooks.PostToolUse += [{
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [{"type": "command", "command": $cmd}]
+      }]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered PostToolUse hook in $SETTINGS (backup saved)"
+  fi
+fi
+
 # ---------- Summary ----------
 
 note "Done"
@@ -120,10 +214,18 @@ Next steps:
      stack info, conventions, and project-specific rules.
 
 Files touched:
-  $HOME_CLAUDE/skills/        (symlinks → $REPO/skills/**)
-  $HOME_CLAUDE/CLAUDE.md      (Universal Phase 0)
-  $HOME_CLAUDE/RTK.md         (optional — RTK CLI ref)
-  $HOME_CLAUDE/memory/        (empty — your global lessons go here)
-  $HOME_CLAUDE/projects/      (empty — per-project memory goes here)
+  $HOME_CLAUDE/skills/                  (symlinks → $REPO/skills/**)
+  $HOME_CLAUDE/CLAUDE.md                (Universal Phase 0)
+  $HOME_CLAUDE/RTK.md                   (optional — RTK CLI ref)
+  $HOME_CLAUDE/memory/                  (empty — your global lessons go here)
+  $HOME_CLAUDE/projects/                (empty — per-project memory goes here)
+  $HOME_CLAUDE/scripts/.venv            (Python venv for lint tooling)
+  $HOME_CLAUDE/scripts/lint-skills.py   (symlink → $REPO/scripts/lint-skills.py)
+  $HOME_CLAUDE/hooks/lint-on-edit.sh    (symlink → $REPO/hooks/lint-on-edit.sh)
+  $HOME_CLAUDE/settings.json            (PostToolUse hook registered)
+
+Lint manually:
+  ~/.claude/scripts/lint-skills.py              # full sweep
+  ~/.claude/scripts/lint-skills.py PATH         # one file or dir
 
 EOF
