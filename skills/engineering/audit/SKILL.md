@@ -21,6 +21,26 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Copy this block into your first response and tick boxes as each phase finishes. The fix queue and memory save are mandatory — do not stop at "report only".
+
+```
+Audit progress:
+- [ ] Phase 1: Stack detected + stated in report
+- [ ] Phase 2: Dimension 1 — Performance / bundle scanned
+- [ ] Phase 2: Dimension 2 — Code Quality / anti-pattern scanned
+- [ ] Phase 2: Dimension 3 — Test Coverage / quality scanned
+- [ ] Phase 2: Dimension 4 — Dependency / supply chain scanned
+- [ ] Phase 3: Filtered + deduped (node_modules / accepted findings)
+- [ ] Phase 4: Severity ranked (criteria respected)
+- [ ] Phase 5: Inline report written (file:line + evidence + suggest)
+- [ ] Post-report: Fix queue produced + saved to project memory
+- [ ] Quality gates passed
+```
+
+---
+
 ## Phase 1 — Stack detection
 
 Identify stack to pick tools that actually work:

@@ -4,6 +4,21 @@
 
 ---
 
+## Contents
+
+- [#valibot](#valibot) — schema, pipe actions, parse vs safeParse
+- [#nuxt-ui](#nuxt-ui) — component replacement table, `UForm` + valibot pattern
+- [#react](#react) — React/Next patterns (when project is not Nuxt)
+- [#nuxt-directory](#nuxt-directory) — v3 vs v4 directory map
+- [#nuxt-auto-imports](#nuxt-auto-imports) — what NOT to import (auto-imported)
+- [#nuxt-state](#nuxt-state) — `useState` vs Pinia, localStorage guard
+- [#nuxt-data-fetching](#nuxt-data-fetching) — `useFetch` / `useAsyncData` / `$fetch`, v3 vs v4 reactivity
+- [#nuxt-routing](#nuxt-routing) — `navigateTo`, middleware, `definePageMeta`
+- [#nuxt-server](#nuxt-server) — `defineEventHandler`, body/query/param, `createError`
+- [#nuxt-ssr](#nuxt-ssr) — `import.meta.client/server`, `<ClientOnly>`, SEO/head
+
+---
+
 ## #valibot
 
 valibot ใช้ pipe-based (ต่างจาก zod chain) — import เฉพาะที่ใช้ (tree-shake friendly, ~10x เล็กกว่า zod)

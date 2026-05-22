@@ -24,6 +24,47 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Pick the block matching your mode and copy it into your first response. Tick boxes as you go — do **not** declare "spec complete" or "no vulnerability" before every box is ticked.
+
+**Mode A — Analyze:**
+
+```
+Analyze (mode A) progress:
+- [ ] Intent + simpler-way gate cleared (4 alternatives + rationale)
+- [ ] Actor / Goal / Trigger identified
+- [ ] Main flow written
+- [ ] Alternate / exception paths written
+- [ ] Data model + ER diagram
+- [ ] API spec (every field typed + nullable + validation)
+- [ ] State machine ≥ 7 states
+- [ ] Acceptance criteria (Given/When/Then) ≥ 1 per main flow
+- [ ] Edge case checklist (empty / max / concurrent / refresh / unauthorized)
+- [ ] Ripple check + backward-compat answered
+- [ ] Handoff checklist sa→ux or sa→fe ticked
+- [ ] Memory updated
+```
+
+**Mode B — Audit:**
+
+```
+Audit (mode B) progress:
+- [ ] Trust boundary mapped (every input point)
+- [ ] Authn vs Authz separated + checked
+- [ ] Input handling reviewed (validate / sanitize / parameterize)
+- [ ] Output handling reviewed (escape / content-type / CORS)
+- [ ] Secret handling reviewed (storage / logs / HTTPS)
+- [ ] Dependency / infra reviewed (CVE / config exposure)
+- [ ] OWASP top 10 swept
+- [ ] Every finding: file:line + attack scenario + implementable fix
+- [ ] Caller-trace ≥ 1 hop done (no false positives)
+- [ ] Ripple-of-fix questions answered
+- [ ] Memory updated (security pattern + detection)
+```
+
+---
+
 ## Handoff (sa is the upstream of pipeline `sa → ux → fe`)
 
 **Hand off to `ux`** (when there is UI):

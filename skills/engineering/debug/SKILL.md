@@ -40,6 +40,27 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Copy this block into your first response and tick boxes as you go. Do **not** skip a box — incomplete = keep diagnosing.
+
+```
+Debug progress:
+- [ ] Mantra recited (or user said skip)
+- [ ] Step 1: Read error literally (quote the message)
+- [ ] Step 2: Locate source (bottom-up stack → our code)
+- [ ] Step 3: Reproduce locally (or asked user for steps)
+- [ ] Step 4a: ≥ 3 ranked hypotheses written
+- [ ] Step 4b: Disproof ran before proof
+- [ ] Step 4c: Breadcrumb ledger updated
+- [ ] Step 5: Fix at root cause + regression verified
+- [ ] Step 6: Ripple traced (whole-project scan)
+- [ ] Memory updated (project + skill learnings as applicable)
+- [ ] Quality gates passed
+```
+
+---
+
 ## Handoff
 
 - **Handle solo** — error message is clear + reproducible + root cause is locatable to a specific file + fix is code-level

@@ -23,6 +23,28 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Copy this block into your first response. Tick boxes as you go — do not declare "done / it's pretty" before every box is ticked.
+
+```
+UX progress:
+- [ ] Memory + theme config + existing components scanned
+- [ ] Mode picked (1: design from mockup / 2: review UI / 3: improve UX)
+- [ ] Reusable components / utilities checked before writing new
+- [ ] Semantic HTML chosen before styling
+- [ ] Design system used before custom CSS
+- [ ] Visual states covered (loading/empty/error/success/partial/unauthorized/max)
+- [ ] Responsive plan (sm/md/lg/xl) with string literal classes
+- [ ] Interaction spec (hover/focus/active/disabled/loading)
+- [ ] Animation spec (or explicitly "no animation")
+- [ ] Accessibility (a11y) checked (aria-label, contrast, focus ring, reduced-motion)
+- [ ] Handoff checklist ux→fe ticked (if handing off)
+- [ ] Quality gates passed (Vite compile / 375–1440 viewports / no horizontal scroll)
+```
+
+---
+
 ## Handoff (ux is the middle stage of pipeline `sa → ux → fe`)
 
 **Receive from `sa`** (if any): user story + state machine + data constraint + acceptance criteria

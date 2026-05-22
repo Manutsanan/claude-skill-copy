@@ -21,6 +21,25 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Copy this block into your first response and tick boxes as each phase finishes. Skipping a phase = the "impatient point-fix" anti-pattern.
+
+```
+Migration progress:
+- [ ] Phase 0: Discover — ≥ 2 regex (loose + strict), results match
+- [ ] Phase 0: Scope listed (files + per-file count + classification)
+- [ ] Phase 1: Plan proposed (batches A/B/C) + user confirmed if > 10 files
+- [ ] Phase 2: Batch 1 executed + verified (tsc / curl / dev log)
+- [ ] Phase 2: All remaining batches verified
+- [ ] Phase 3: Re-scan = 0 (loose + strict both)
+- [ ] Phase 3: Manual spot-check 2–3 files
+- [ ] Phase 3: Full build success
+- [ ] Memory updated (pattern + regex + gotcha)
+```
+
+---
+
 ## Handoff
 
 **Receive from `sa`** (if any): target pattern + reason + ripple list

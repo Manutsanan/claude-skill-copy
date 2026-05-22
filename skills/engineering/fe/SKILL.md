@@ -23,6 +23,29 @@ Extend Universal Phase 0 (see `~/.claude/CLAUDE.md`):
 
 ---
 
+## Progress tracker
+
+Copy this block into your first response. Tick boxes as you go — never claim "done" until every box is ticked.
+
+```
+fe progress:
+- [ ] Memory + project CLAUDE.md + existing code scanned
+- [ ] Stack detected (Nuxt 3 / 4 / 3+v4-compat) — quoted in reasoning
+- [ ] Mode picked (1: build/refactor / 2: review/audit)
+- [ ] Handoff input from sa/ux quoted (1–2 lines) if applicable
+- [ ] State location decided (local / composable / store / server)
+- [ ] Side-effect lifecycle decided + cleanup planned
+- [ ] Types defined before implementation body
+- [ ] Validation at boundaries only (valibot safeParse/parse)
+- [ ] Nuxt UI used before raw elements (where applicable)
+- [ ] Ripple traced (caller ≥ 1 hop) for shared code edits
+- [ ] Quality gates: tsc 0 errors + Vite compile + dev log clean
+- [ ] UI verify (if UI changed): golden path + ≥ 2 edge cases + 375px mobile
+- [ ] Memory updated (project pattern / skill learnings)
+```
+
+---
+
 ## Stack default
 
 If project does not enforce a different stack, **default to:**
