@@ -37,6 +37,10 @@ cd ~/Project/claude-skill-copy
   - [Skill discipline — examples](#5-skill-discipline--examples)
   - [Memory loop — 3 tiers + graduation](#6-memory-loop--3-tiers--graduation)
 - [Install](#install)
+  - [Prerequisites](#prerequisites)
+  - [One-time bootstrap](#one-time-bootstrap)
+  - [Lint tooling](#lint-tooling-skill--memory-frontmatter-validator)
+  - [Browser automation (chrome-devtools MCP)](#browser-automation-chrome-devtools-mcp)
 - [How to use](#how-to-use)
 - [Skills reference](#skills-reference)
 - [Per-project CLAUDE.md](#per-project-claudemd)
@@ -203,6 +207,8 @@ SKILL.md rule
 - [Claude Code](https://claude.com/claude-code) — CLI / desktop / VS Code extension
 - `git` + `bash` (zsh ใช้ได้)
 - macOS / Linux / WSL (Windows native ไม่รองรับ symlink)
+- **Auto-installed by setup.sh:** `ripgrep` (via brew/apt/dnf/yum/pacman), `chrome-devtools` MCP (via `claude mcp add`)
+- **Soft prerequisites (warn-only if missing):** Node.js 18+ (สำหรับ MCP), Chrome/Chromium (สำหรับ browser automation), `python3` + `jq` (สำหรับ lint tooling)
 - **Optional:** [RTK CLI](https://github.com/skarekrow/rtk) สำหรับ token saving บน shell commands
 
 ### One-time bootstrap
@@ -217,16 +223,20 @@ cd ~/Project/claude-skill-copy
 
 | ขั้น | Action |
 |---|---|
+| 0 | ตรวจ + ติดตั้ง system deps (ripgrep auto-install via package manager; curl/Node/Chrome detect + warn) |
 | 1 | Symlink 7 skills → `~/.claude/skills/<name>/` (skip ถ้ามี real dir อยู่แล้ว) |
 | 2 | ติดตั้ง `~/.claude/CLAUDE.md` จาก template (skip ถ้ามี — `--force` = backup เก่าก่อน) |
 | 3 | ติดตั้ง `~/.claude/RTK.md` (เหมือนกัน) |
 | 4 | สร้าง `~/.claude/memory/` + `~/.claude/projects/` (เปล่า) |
 | 5 | ติดตั้ง lint tooling — venv + PyYAML + symlink scripts/hook + register PostToolUse hook (ต้องมี `python3` + `jq`; skip ถ้าไม่มี) |
-| 6 | Print next steps |
+| 6 | Register `chrome-devtools` MCP at user scope via `claude mcp add` (idempotent; powers debug/ux/audit/fe browser playbooks) |
+| 7 | Print summary + missing-soft-deps checklist |
 
 **Flags:**
 - `--force` — overwrite `CLAUDE.md` / `RTK.md` (backup เก่าเป็น `*.bak.YYYY-MM-DD`)
 - `--skip-link` — ข้าม symlink (ถ้า link เองแล้ว)
+- `--skip-deps` — ข้าม auto-install ของ system dependencies (ripgrep)
+- `--skip-mcp` — ข้าม chrome-devtools MCP register (ถ้าไม่อยากได้ browser automation)
 
 ### Lint tooling (skill + memory frontmatter validator)
 
@@ -251,11 +261,34 @@ cd ~/Project/claude-skill-copy
 
 **Hook behavior:** PostToolUse fire เฉพาะเมื่อ Edit/Write/NotebookEdit touch path ที่ขึ้นต้นด้วย `~/.claude/skills/`, `~/.claude/memory/`, หรือ `~/.claude/projects/*/memory/` — exit 0 เสมอ ถ้ามี warning/error จะ print ผ่าน stderr ให้ user เห็นใน Claude Code transcript
 
+### Browser automation (chrome-devtools MCP)
+
+`setup.sh` register `chrome-devtools` MCP at user scope ทันที — skill `debug` / `ux` / `audit` / `fe` มี playbook ในตัวสำหรับ browser automation (reproduce, snapshot, lighthouse, perf trace, memory leak detection)
+
+**ROI โดยประมาณ** (เทียบกับไม่มี MCP):
+
+| Skill | Quality lift | Token overhead |
+|---|---|---|
+| `verify` / `debug` | +50-80% | +30-60% |
+| `ux` (visual + responsive + a11y) | +30-50% | +50-120% |
+| `audit` (perf/a11y dimension) | +40-70% | +60-150% |
+| `fe` (opt-in for reactivity/hydration) | +10-25% | +20-40% |
+
+**Token discipline:** CLAUDE.md มี dedicated section "Chrome DevTools MCP integration" — Token cost reference + Broad-vs-narrow decision rule + Token-saving toolkit (3 tiers: Safe-always / Context-dependent / Avoid-by-default) + Decision flow ที่ Claude ต้องเดินก่อนเรียก browser tool ทุกครั้ง
+
+**Graceful degradation:** ถ้า MCP ไม่พร้อม (Chrome ไม่ลง / dev server ไม่ขึ้น / user ปิด MCP) — ทุก skill มี **Fallback section** ที่ระบุชัดว่าจะ degrade ยังไง (ขอ user paste screenshot, verify ด้วย code-level เท่านั้น, etc.) ไม่ crash, ไม่ block
+
+**Verify MCP install:**
+```bash
+claude mcp list                       # ต้องเห็น "chrome-devtools"
+```
+
 ### Verify install
 
 ```bash
 ls -la ~/.claude/skills/         # ควรเห็น symlinks 7 ตัว → repo
 head ~/.claude/CLAUDE.md         # ต้องขึ้น "@RTK.md" + "Universal Phase 0"
+claude mcp list                  # ต้องเห็น "chrome-devtools" (ถ้าไม่ใช้ --skip-mcp)
 ```
 
 เปิด Claude Code ใน project ใดก็ได้ ลอง:
@@ -358,15 +391,15 @@ verify
 
 ## Skills reference
 
-| Skill | What | When to use | Extras |
-|---|---|---|---|
-| [`sa`](skills/engineering/sa/SKILL.md) | System Analyst (Mode A) + Security Audit (Mode B) | วิเคราะห์ requirement / spec / OWASP / threat model | [`learnings.md`](skills/engineering/sa/learnings.md) |
-| [`ux`](skills/engineering/ux/SKILL.md) | Visual + interaction design | layout / color / animation / responsive / a11y | [`learnings.md`](skills/engineering/ux/learnings.md) |
-| [`fe`](skills/engineering/fe/SKILL.md) | Frontend code (Nuxt/Vue/React/TS) | component / composable / state / reactivity / schema | [`learnings.md`](skills/engineering/fe/learnings.md) · [`REFERENCE.md`](skills/engineering/fe/REFERENCE.md) |
-| [`debug`](skills/engineering/debug/SKILL.md) | Bug diagnosis | runtime error / X พัง / ไม่ทำงาน | [`learnings.md`](skills/engineering/debug/learnings.md) |
-| [`migrate`](skills/engineering/migrate/SKILL.md) | Bulk transformation | legacy pattern → new pattern หลายไฟล์ | [`learnings.md`](skills/engineering/migrate/learnings.md) |
-| [`audit`](skills/engineering/audit/SKILL.md) | Project health sweep (read-only) | perf / dead code / coverage / dependency | [`learnings.md`](skills/engineering/audit/learnings.md) |
-| [`_template`](skills/misc/_template/SKILL.md) | Skeleton สำหรับสร้าง skill ใหม่ | copy แล้วแก้ตาม use case | — |
+| Skill | What | When to use | Browser MCP | Extras |
+|---|---|---|---|---|
+| [`sa`](skills/engineering/sa/SKILL.md) | System Analyst (Mode A) + Security Audit (Mode B) | วิเคราะห์ requirement / spec / OWASP / threat model | — | [`learnings.md`](skills/engineering/sa/learnings.md) |
+| [`ux`](skills/engineering/ux/SKILL.md) | Visual + interaction design | layout / color / animation / responsive / a11y | ✅ visual + responsive + a11y | [`learnings.md`](skills/engineering/ux/learnings.md) |
+| [`fe`](skills/engineering/fe/SKILL.md) | Frontend code (Nuxt/Vue/React/TS) | component / composable / state / reactivity / schema | 🟡 opt-in (reactivity/hydration) | [`learnings.md`](skills/engineering/fe/learnings.md) · [`REFERENCE.md`](skills/engineering/fe/REFERENCE.md) |
+| [`debug`](skills/engineering/debug/SKILL.md) | Bug diagnosis | runtime error / X พัง / ไม่ทำงาน | ✅ reproduce + inspect | [`learnings.md`](skills/engineering/debug/learnings.md) |
+| [`migrate`](skills/engineering/migrate/SKILL.md) | Bulk transformation | legacy pattern → new pattern หลายไฟล์ | — | [`learnings.md`](skills/engineering/migrate/learnings.md) |
+| [`audit`](skills/engineering/audit/SKILL.md) | Project health sweep (read-only) | perf / dead code / coverage / dependency | ✅ lighthouse + perf trace | [`learnings.md`](skills/engineering/audit/learnings.md) |
+| [`_template`](skills/misc/_template/SKILL.md) | Skeleton สำหรับสร้าง skill ใหม่ | copy แล้วแก้ตาม use case | — | — |
 
 **ไฟล์ในแต่ละ skill folder:**
 - `SKILL.md` — discipline + workflow + handoff checklist (Claude อ่านทุกครั้งที่ skill trigger)
