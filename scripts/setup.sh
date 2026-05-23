@@ -5,18 +5,20 @@ set -euo pipefail
 # Idempotent — safe to re-run; never overwrites existing files without confirmation.
 #
 # What this does:
-#   1. Link skills/* into ~/.claude/skills/ (via link-skills.sh)
-#   2. Install ~/.claude/CLAUDE.md from CLAUDE.template.md (if missing or with --force)
-#   3. Install ~/.claude/RTK.md from RTK.template.md (if missing or with --force)
-#   4. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
-#   5. Install lint tooling (PostToolUse hook + Python venv)
-#   6. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
-#   7. Print next steps
+#   1. Check + install system dependencies (ripgrep, etc.)
+#   2. Link skills/* into ~/.claude/skills/ (via link-skills.sh)
+#   3. Install ~/.claude/CLAUDE.md from CLAUDE.template.md (if missing or with --force)
+#   4. Install ~/.claude/RTK.md from RTK.template.md (if missing or with --force)
+#   5. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
+#   6. Install lint tooling (PostToolUse hook + Python venv)
+#   7. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
+#   8. Print next steps + missing-dependency warnings
 #
 # Flags:
 #   --force   Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
 #   --skip-link  Skip symlink step (if you already linked manually)
 #   --skip-mcp   Skip chrome-devtools MCP install (if you don't want browser automation)
+#   --skip-deps  Skip auto-install of system dependencies (rg, etc.)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -24,13 +26,15 @@ HOME_CLAUDE="$HOME/.claude"
 FORCE=0
 SKIP_LINK=0
 SKIP_MCP=0
+SKIP_DEPS=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --skip-link) SKIP_LINK=1 ;;
     --skip-mcp) SKIP_MCP=1 ;;
+    --skip-deps) SKIP_DEPS=1 ;;
     -h|--help)
-      sed -n '3,20p' "$0"
+      sed -n '3,22p' "$0"
       exit 0
       ;;
     *)
@@ -43,6 +47,104 @@ done
 note() { printf '\n\033[1;34m== %s ==\033[0m\n' "$*"; }
 ok()   { printf '  \033[1;32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[1;33m!\033[0m %s\n' "$*"; }
+
+# Track missing soft deps for final summary
+MISSING_SOFT_DEPS=()
+
+# ---------- 0. System dependencies ----------
+#
+# Auto-install heavy-use CLI tools that skills depend on.
+# Hard required: rg (ripgrep) — used by audit/sa/fe/debug for code scans.
+# Soft required: curl (almost always preinstalled), Chrome/Chromium (warn only).
+
+detect_pkg_manager() {
+  if [[ "$OSTYPE" == "darwin"* ]] && command -v brew &>/dev/null; then echo "brew"
+  elif command -v apt-get &>/dev/null; then echo "apt"
+  elif command -v dnf &>/dev/null; then echo "dnf"
+  elif command -v yum &>/dev/null; then echo "yum"
+  elif command -v pacman &>/dev/null; then echo "pacman"
+  else echo ""
+  fi
+}
+
+install_pkg() {
+  local pkg="$1"
+  local pm="$2"
+  case "$pm" in
+    brew)   brew install "$pkg" ;;
+    apt)    sudo apt-get install -y "$pkg" ;;
+    dnf)    sudo dnf install -y "$pkg" ;;
+    yum)    sudo yum install -y "$pkg" ;;
+    pacman) sudo pacman -S --noconfirm "$pkg" ;;
+    *)      return 1 ;;
+  esac
+}
+
+if [ "$SKIP_DEPS" -eq 1 ]; then
+  note "Skipping system dependency install (--skip-deps)"
+else
+  note "Checking system dependencies"
+
+  PM="$(detect_pkg_manager)"
+
+  # ripgrep (rg) — hard required for skill pattern scans
+  if command -v rg &>/dev/null; then
+    ok "ripgrep (rg) found: $(rg --version | head -1)"
+  elif [ -n "$PM" ]; then
+    warn "ripgrep (rg) missing — installing via $PM"
+    if install_pkg ripgrep "$PM"; then
+      ok "ripgrep installed"
+    else
+      warn "ripgrep install failed — install manually: $PM install ripgrep"
+      MISSING_SOFT_DEPS+=("ripgrep (used heavily by audit/sa/fe/debug skills)")
+    fi
+  else
+    warn "ripgrep (rg) missing + no package manager detected"
+    echo "      install manually: https://github.com/BurntSushi/ripgrep#installation"
+    MISSING_SOFT_DEPS+=("ripgrep (used heavily by audit/sa/fe/debug skills)")
+  fi
+
+  # curl — soft required, almost always present
+  if command -v curl &>/dev/null; then
+    ok "curl found"
+  else
+    warn "curl missing — skills can't HTTP-check dev server"
+    MISSING_SOFT_DEPS+=("curl (used to verify dev server HTTP 200)")
+  fi
+
+  # Node.js / npx — needed for chrome-devtools MCP + per-project work
+  if command -v npx &>/dev/null; then
+    ok "Node.js + npx found: $(node --version 2>/dev/null || echo "node version unknown")"
+  else
+    warn "Node.js / npx missing — chrome-devtools MCP install will fail"
+    echo "      install Node 18+ from https://nodejs.org or via $PM"
+    MISSING_SOFT_DEPS+=("Node.js + npx (required for chrome-devtools MCP and JS projects)")
+  fi
+
+  # Chrome / Chromium — warn only (platform-specific, heavyweight)
+  CHROME_FOUND=0
+  CHROME_CANDIDATES=(
+    "google-chrome"
+    "chromium"
+    "chromium-browser"
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    "/Applications/Chromium.app/Contents/MacOS/Chromium"
+  )
+  for chrome_bin in "${CHROME_CANDIDATES[@]}"; do
+    if command -v "$chrome_bin" &>/dev/null || [ -x "$chrome_bin" ]; then
+      CHROME_FOUND=1
+      break
+    fi
+  done
+  if [ "$CHROME_FOUND" -eq 1 ]; then
+    ok "Chrome/Chromium binary detected"
+  else
+    warn "Chrome/Chromium not detected — chrome-devtools MCP needs it to run"
+    echo "      macOS: download from https://www.google.com/chrome/"
+    echo "      Linux: $PM install chromium (or google-chrome-stable)"
+    MISSING_SOFT_DEPS+=("Chrome/Chromium browser (required for chrome-devtools MCP playbooks)")
+  fi
+fi
 
 # ---------- 1. Link skills ----------
 
@@ -267,6 +369,19 @@ Files touched:
 Verify chrome-devtools MCP:
   claude mcp list                       # should show "chrome-devtools"
   (requires Chrome/Chromium on this machine to actually run)
+
+EOF
+
+if [ ${#MISSING_SOFT_DEPS[@]} -gt 0 ]; then
+  printf '\n\033[1;33m== Missing soft dependencies (skills will degrade gracefully) ==\033[0m\n'
+  for dep in "${MISSING_SOFT_DEPS[@]}"; do
+    printf '  \033[1;33m!\033[0m %s\n' "$dep"
+  done
+  echo
+fi
+
+cat <<EOF
+
 
 Lint manually:
   ~/.claude/scripts/lint-skills.py              # full sweep
