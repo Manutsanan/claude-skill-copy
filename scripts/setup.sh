@@ -112,6 +112,46 @@ else
     MISSING_SOFT_DEPS+=("curl (used to verify dev server HTTP 200)")
   fi
 
+  # python3 — required for lint tooling (PostToolUse hook)
+  if command -v python3 &>/dev/null; then
+    ok "python3 found: $(python3 --version 2>&1)"
+  elif [ -n "$PM" ]; then
+    # Package name varies: brew=python@3.x or python3, debian=python3, fedora/rhel=python3, arch=python
+    case "$PM" in
+      brew)   PY_PKG="python3" ;;
+      pacman) PY_PKG="python" ;;
+      *)      PY_PKG="python3" ;;
+    esac
+    warn "python3 missing — installing via $PM"
+    if install_pkg "$PY_PKG" "$PM"; then
+      ok "python3 installed"
+    else
+      warn "python3 install failed — install manually: $PM install $PY_PKG"
+      MISSING_SOFT_DEPS+=("python3 (required for lint tooling — skill/memory validator)")
+    fi
+  else
+    warn "python3 missing + no package manager detected"
+    echo "      install manually: https://www.python.org/downloads/"
+    MISSING_SOFT_DEPS+=("python3 (required for lint tooling — skill/memory validator)")
+  fi
+
+  # jq — required for lint tooling (settings.json hook registration)
+  if command -v jq &>/dev/null; then
+    ok "jq found: $(jq --version 2>&1)"
+  elif [ -n "$PM" ]; then
+    warn "jq missing — installing via $PM"
+    if install_pkg jq "$PM"; then
+      ok "jq installed"
+    else
+      warn "jq install failed — install manually: $PM install jq"
+      MISSING_SOFT_DEPS+=("jq (required for lint tooling — PostToolUse hook registration)")
+    fi
+  else
+    warn "jq missing + no package manager detected"
+    echo "      install manually: https://stedolan.github.io/jq/download/"
+    MISSING_SOFT_DEPS+=("jq (required for lint tooling — PostToolUse hook registration)")
+  fi
+
   # Node.js / npx — needed for chrome-devtools MCP + per-project work
   if command -v npx &>/dev/null; then
     ok "Node.js + npx found: $(node --version 2>/dev/null || echo "node version unknown")"

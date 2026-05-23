@@ -207,8 +207,8 @@ SKILL.md rule
 - [Claude Code](https://claude.com/claude-code) — CLI / desktop / VS Code extension
 - `git` + `bash` (zsh ใช้ได้)
 - macOS / Linux / WSL (Windows native ไม่รองรับ symlink)
-- **Auto-installed by setup.sh:** `ripgrep` (via brew/apt/dnf/yum/pacman), `chrome-devtools` MCP (via `claude mcp add`)
-- **Soft prerequisites (warn-only if missing):** Node.js 18+ (สำหรับ MCP), Chrome/Chromium (สำหรับ browser automation), `python3` + `jq` (สำหรับ lint tooling)
+- **Auto-installed by setup.sh** (via brew/apt/dnf/yum/pacman): `ripgrep`, `python3`, `jq`, plus `chrome-devtools` MCP (via `claude mcp add`)
+- **Soft prerequisites (warn-only if missing):** Node.js 18+ (สำหรับ MCP), Chrome/Chromium (สำหรับ browser automation)
 - **Optional:** [RTK CLI](https://github.com/skarekrow/rtk) สำหรับ token saving บน shell commands
 
 ### One-time bootstrap
@@ -223,12 +223,12 @@ cd ~/Project/claude-skill-copy
 
 | ขั้น | Action |
 |---|---|
-| 0 | ตรวจ + ติดตั้ง system deps (ripgrep auto-install via package manager; curl/Node/Chrome detect + warn) |
+| 0 | ตรวจ + ติดตั้ง system deps (ripgrep + python3 + jq auto-install via package manager; curl/Node/Chrome detect + warn) |
 | 1 | Symlink 7 skills → `~/.claude/skills/<name>/` (skip ถ้ามี real dir อยู่แล้ว) |
 | 2 | ติดตั้ง `~/.claude/CLAUDE.md` จาก template (skip ถ้ามี — `--force` = backup เก่าก่อน) |
 | 3 | ติดตั้ง `~/.claude/RTK.md` (เหมือนกัน) |
 | 4 | สร้าง `~/.claude/memory/` + `~/.claude/projects/` (เปล่า) |
-| 5 | ติดตั้ง lint tooling — venv + PyYAML + symlink scripts/hook + register PostToolUse hook (ต้องมี `python3` + `jq`; skip ถ้าไม่มี) |
+| 5 | ติดตั้ง lint tooling — venv + PyYAML + symlink scripts/hook + register PostToolUse hook (deps `python3` + `jq` ถูก auto-install ใน step 0 แล้ว) |
 | 6 | Register `chrome-devtools` MCP at user scope via `claude mcp add` (idempotent; powers debug/ux/audit/fe browser playbooks) |
 | 7 | Print summary + missing-soft-deps checklist |
 
