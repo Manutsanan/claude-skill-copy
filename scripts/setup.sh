@@ -9,23 +9,28 @@ set -euo pipefail
 #   2. Install ~/.claude/CLAUDE.md from CLAUDE.template.md (if missing or with --force)
 #   3. Install ~/.claude/RTK.md from RTK.template.md (if missing or with --force)
 #   4. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
-#   5. Print next steps
+#   5. Install lint tooling (PostToolUse hook + Python venv)
+#   6. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
+#   7. Print next steps
 #
 # Flags:
 #   --force   Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
 #   --skip-link  Skip symlink step (if you already linked manually)
+#   --skip-mcp   Skip chrome-devtools MCP install (if you don't want browser automation)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
 
 FORCE=0
 SKIP_LINK=0
+SKIP_MCP=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --skip-link) SKIP_LINK=1 ;;
+    --skip-mcp) SKIP_MCP=1 ;;
     -h|--help)
-      sed -n '3,18p' "$0"
+      sed -n '3,20p' "$0"
       exit 0
       ;;
     *)
@@ -194,6 +199,40 @@ else
   fi
 fi
 
+# ---------- 6. chrome-devtools MCP ----------
+#
+# Powers the browser-automation playbooks in debug/ux/audit/fe skills.
+# Without this, those skills fall back to "ask user for screenshot" path —
+# functional but ~35-55% less effective per quality lift estimates.
+#
+# Installs at user scope so it's available across all projects.
+# Idempotent — skip if already registered.
+
+if [ "$SKIP_MCP" -eq 1 ]; then
+  note "Skipping chrome-devtools MCP install (--skip-mcp)"
+else
+  note "Installing chrome-devtools MCP (browser automation for debug/ux/audit/fe)"
+
+  if ! command -v claude &>/dev/null; then
+    warn "claude CLI not found — install manually later:"
+    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+  elif ! command -v npx &>/dev/null; then
+    warn "npx not found (need Node.js) — install Node then run:"
+    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+  elif claude mcp list 2>/dev/null | grep -qi "chrome-devtools"; then
+    ok "chrome-devtools MCP already registered"
+  else
+    if claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>&1 | tail -5; then
+      ok "chrome-devtools MCP installed at user scope"
+      echo "      First call will download chrome-devtools-mcp via npx (one-time, ~10MB)"
+      echo "      Requires Chrome/Chromium installed on this machine"
+    else
+      warn "chrome-devtools MCP install failed — try manually:"
+      echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+    fi
+  fi
+fi
+
 # ---------- Summary ----------
 
 note "Done"
@@ -223,6 +262,11 @@ Files touched:
   $HOME_CLAUDE/scripts/lint-skills.py   (symlink → $REPO/scripts/lint-skills.py)
   $HOME_CLAUDE/hooks/lint-on-edit.sh    (symlink → $REPO/hooks/lint-on-edit.sh)
   $HOME_CLAUDE/settings.json            (PostToolUse hook registered)
+  Claude MCP servers                    (chrome-devtools registered at user scope)
+
+Verify chrome-devtools MCP:
+  claude mcp list                       # should show "chrome-devtools"
+  (requires Chrome/Chromium on this machine to actually run)
 
 Lint manually:
   ~/.claude/scripts/lint-skills.py              # full sweep
