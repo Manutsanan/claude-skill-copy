@@ -103,7 +103,7 @@ Audit (mode B) progress:
 ### Reference tracing checklist (before concluding any finding)
 
 For every symbol / function / type / state / route / schema:
-- [ ] grep the symbol name across the whole project — `rg "name" --type ts --type vue` (do not stop at the definition)
+- [ ] trace callers of symbol — `mcp__codegraph__callers <name>` (semantic, preferred); fallback `rg "name" --type ts --type vue` for new-session symbols or literal strings
 - [ ] trace the import chain — caller of caller (≥ 2 hops)
 - [ ] trace type usage — every consumer
 - [ ] trace state mutation — every mutate + read site
@@ -187,7 +187,7 @@ Can't produce a rationale — tell user it's underspecified, ask first
 - [ ] every API endpoint has explicit auth requirement
 - [ ] every state transition has explicit condition for who can trigger it
 - [ ] edge cases: empty / max / concurrent / refresh mid-flow / unauthorized
-- [ ] **ripple check** — where do new field/type changes hit consumers
+- [ ] **ripple check** — `mcp__codegraph__impact <symbol>` for cascading impact; `mcp__codegraph__callers` per new field/type to list every consumer
 - [ ] **backward compat** — old data in storage with old shape has migration/fallback?
 - [ ] **Spec format check** — if output would exceed 200 lines, emit as HTML spec file instead of markdown
 - [ ] **Update skill learnings** if a lesson generalizes across projects (edge case pattern, state machine pitfall, question template)

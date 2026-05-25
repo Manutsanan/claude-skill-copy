@@ -56,7 +56,7 @@ Migration progress:
 
 ### Phase 0 — Discover & Scope
 
-1. **Scan with ≥ 2 patterns** (loose + strict) — results must match (mismatch = strict regex wrong)
+1. **Scan for occurrences** — for named symbols: `mcp__codegraph__callers <symbol>` first (semantic graph, preferred); then confirm with ≥ 2 regex patterns (loose + strict) — results must match (mismatch = strict regex wrong)
 2. List all files + count per file
 3. **Classify:** single pattern or multiple shapes? mechanical or context-dependent?
 4. **Map dependencies:** which files reference which, what edit order is required
@@ -98,6 +98,8 @@ One batch at a time (not one file at a time, not the whole set in one shot):
 Rule: every script must (1) print "files modified" + "matches replaced", (2) run on 1 file first to verify, (3) git commit/stash before running
 
 **Edit tool** — when context-dependent or < 10 sites
+
+**CodeGraph MCP** — `mcp__codegraph__callers <symbol>` for named symbols (faster than Explore agent when name is known); `mcp__codegraph__explore <sym1> <sym2>` for multi-symbol source dump
 
 **Explore agent** — discover phase at large scope (faster than grep one-by-one)
 

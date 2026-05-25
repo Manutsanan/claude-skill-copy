@@ -86,7 +86,7 @@ Example: `A <SelectItem /> must have a value prop that is not an empty string.` 
 
 ### Step 2 — Locate source (bottom-up stack)
 
-Read the stack **bottom-up** to find the **caller from our code** (skip library internal frames).
+Read the stack **bottom-up** to find the **caller from our code** (skip library internal frames). For semantic call path from any symbol → use `mcp__codegraph__trace <symbol>` to see the full caller chain instantly.
 
 ### Step 3 — Reproduce locally
 
@@ -142,6 +142,9 @@ For hypothesis #1:
 ### Step 6 — Trace ripple
 
 If root cause = pattern (e.g. `value: ''`) → scan the whole project:
+
+- **Named symbol** (function / composable / type) → `mcp__codegraph__callers <symbol>` first (semantic, instant)
+- **Literal string pattern** (e.g. `value: ""`, `value: ''`) → grep always:
 
 ```bash
 grep -rn 'value: ""' app/ --include="*.vue" --include="*.ts"

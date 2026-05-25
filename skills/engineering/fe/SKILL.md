@@ -38,7 +38,7 @@ fe progress:
 - [ ] Types defined before implementation body
 - [ ] Validation at boundaries only (valibot safeParse/parse)
 - [ ] Nuxt UI used before raw elements (where applicable)
-- [ ] Ripple traced (caller ≥ 1 hop) for shared code edits
+- [ ] Ripple traced (caller ≥ 1 hop): `mcp__codegraph__callers <symbol>` first; fallback `rg` for new-session symbols or literal patterns
 - [ ] Quality gates: tsc 0 errors + Vite compile + dev log clean
 - [ ] UI verify (if UI changed): golden path + ≥ 2 edge cases + 375px mobile
 - [ ] Memory updated (project pattern / skill learnings)
