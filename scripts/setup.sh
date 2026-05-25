@@ -12,13 +12,15 @@ set -euo pipefail
 #   5. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
 #   6. Install lint tooling (PostToolUse hook + Python venv)
 #   7. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
-#   8. Print next steps + missing-dependency warnings
+#   8. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
+#   9. Print next steps + missing-dependency warnings
 #
 # Flags:
-#   --force   Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
-#   --skip-link  Skip symlink step (if you already linked manually)
-#   --skip-mcp   Skip chrome-devtools MCP install (if you don't want browser automation)
-#   --skip-deps  Skip auto-install of system dependencies (rg, etc.)
+#   --force           Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
+#   --skip-link       Skip symlink step (if you already linked manually)
+#   --skip-mcp        Skip chrome-devtools MCP install (if you don't want browser automation)
+#   --skip-deps       Skip auto-install of system dependencies (rg, etc.)
+#   --with-codegraph  Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -27,14 +29,16 @@ FORCE=0
 SKIP_LINK=0
 SKIP_MCP=0
 SKIP_DEPS=0
+WITH_CODEGRAPH=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --skip-link) SKIP_LINK=1 ;;
     --skip-mcp) SKIP_MCP=1 ;;
     --skip-deps) SKIP_DEPS=1 ;;
+    --with-codegraph) WITH_CODEGRAPH=1 ;;
     -h|--help)
-      sed -n '3,22p' "$0"
+      sed -n '3,23p' "$0"
       exit 0
       ;;
     *)
@@ -375,6 +379,71 @@ else
   fi
 fi
 
+# ---------- 7. CodeGraph MCP (opt-in) ----------
+#
+# Adds semantic codebase intelligence to ripple checks across all skills:
+#   sa/fe  — callers list + impact analysis (replaces rg for named symbols)
+#   debug  — call path trace from crash site
+#   migrate — discover scope by callers graph before regex scan
+#
+# Opt-in (--with-codegraph) because CodeGraph requires per-project init
+# (codegraph init -i) and is not useful until that step is done.
+# After global install, run `codegraph init -i` once per project.
+
+if [ "$WITH_CODEGRAPH" -eq 0 ]; then
+  note "CodeGraph MCP skipped (add --with-codegraph to install)"
+else
+  note "Installing CodeGraph MCP (semantic ripple check for sa/fe/debug/migrate)"
+
+  CODEGRAPH_BIN="$HOME/.local/bin/codegraph"
+
+  # 7a. Install binary if missing
+  if command -v codegraph &>/dev/null || [ -x "$CODEGRAPH_BIN" ]; then
+    ok "codegraph already installed: $(codegraph --version 2>/dev/null || "$CODEGRAPH_BIN" --version 2>/dev/null || echo "version unknown")"
+  elif command -v curl &>/dev/null; then
+    warn "codegraph not found — downloading installer"
+    if curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh; then
+      ok "codegraph installed: $("$CODEGRAPH_BIN" --version 2>/dev/null || echo "version unknown")"
+    else
+      warn "codegraph install failed — install manually:"
+      echo "      curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh"
+      MISSING_SOFT_DEPS+=("codegraph binary (see https://github.com/colbymchenry/codegraph)")
+    fi
+  else
+    warn "curl not found — install codegraph manually:"
+    echo "      curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh"
+    MISSING_SOFT_DEPS+=("codegraph binary (requires curl)")
+  fi
+
+  # 7b. Detect actual binary path (post-install)
+  CODEGRAPH_CMD="$(command -v codegraph 2>/dev/null || echo "$CODEGRAPH_BIN")"
+
+  # 7c. Register MCP config in ~/.claude.json (idempotent)
+  CLAUDE_JSON="$HOME/.claude.json"
+  if [ ! -f "$CLAUDE_JSON" ]; then
+    warn "~/.claude.json not found — add manually under mcpServers:"
+    printf '      "codegraph": {"type":"stdio","command":"%s","args":["serve","--mcp"]}\n' "$CODEGRAPH_CMD"
+  elif ! command -v jq &>/dev/null; then
+    warn "jq not found — add manually to ~/.claude.json under mcpServers:"
+    printf '      "codegraph": {"type":"stdio","command":"%s","args":["serve","--mcp"]}\n' "$CODEGRAPH_CMD"
+  elif jq -e '.mcpServers.codegraph' "$CLAUDE_JSON" >/dev/null 2>&1; then
+    ok "codegraph MCP already registered in ~/.claude.json"
+  else
+    cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$CODEGRAPH_CMD" '
+      .mcpServers //= {} |
+      .mcpServers.codegraph = {"type":"stdio","command":$cmd,"args":["serve","--mcp"]}
+    ' "$CLAUDE_JSON" > "$tmp" && mv "$tmp" "$CLAUDE_JSON"
+    ok "codegraph MCP registered in ~/.claude.json (backup saved)"
+    echo "      Restart Claude Code to pick up the new MCP server"
+  fi
+
+  echo ""
+  echo "      Next: run once per project to build the index:"
+  echo "        cd /your/project && codegraph init -i"
+fi
+
 # ---------- Summary ----------
 
 note "Done"
@@ -388,10 +457,14 @@ Next steps:
   2. (Optional) Install RTK CLI if you want token savings on shell commands.
      Skip if you don't have it — skills still work, just no rtk filtering.
 
-  3. Memory starts empty — that's expected. Lessons accumulate as you work.
+  3. (Optional) Install CodeGraph MCP for semantic ripple checks:
+       ./scripts/setup.sh --with-codegraph
+     Then init once per project: cd /your/project && codegraph init -i
+
+  4. Memory starts empty — that's expected. Lessons accumulate as you work.
      Read CLAUDE.md sections "Save triggers" + "Graduation pipeline" for how it grows.
 
-  4. Customize for your project: add a CLAUDE.md inside your project root with
+  5. Customize for your project: add a CLAUDE.md inside your project root with
      stack info, conventions, and project-specific rules.
 
 Files touched:
