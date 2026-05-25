@@ -27,6 +27,11 @@ Load in order, 2 tiers (global → project):
 - If a checkpoint with `status: in_progress` is found → echo it to the user + ask whether to **resume** (load artifact from checkpoint) or **start fresh** (mark checkpoint as `abandoned`)
 - If no checkpoint or all checkpoints are `status: complete` → skip
 
+### Skill trigger vocabulary — `~/.claude/memory/skill_trigger_vocabulary.md`
+- Thai/natural-language triggers mapped to skills — grows via distill pipeline from corrected invocations
+- If file exists → load Thai keyword lists; use alongside decision matrix in step 3
+- Cap: 30-50 entries/skill — pruned by `/distill-memory` when exceeded
+
 ## 2. Echo & Conflict check
 
 - Echo top 3-5 relevant entries back to the user **before** starting work — required format: `[type] slug — one-line hook` **max 1 line per entry, never quote the entry body**
@@ -43,9 +48,10 @@ Load in order, 2 tiers (global → project):
 ## 3. Evaluate decision matrix → pick skill
 
 Refer to the "Quick decision matrix" table in the Skill orchestration section below:
-- Match user intent to the appropriate skill
+- Match user intent to the appropriate skill — cross-check `skill_trigger_vocabulary.md` Thai phrases (loaded in step 1) before deciding
 - Falls under an exception (config / docs / typo / general question) → do not invoke a skill, handle directly
 - Invoking a skill → that skill will run **Phase 0.5** itself (loads `~/.claude/skills/<skill>/learnings.md`)
+- **Soft confirmation (mandatory on invoke):** first line of response must be `→ invoking \`[skill]\` ([reason ≤5 words])` — 1 line only, no header, no bold, no extra formatting
 
 ## 4. Universal save triggers (mandatory — force save mid-turn)
 
@@ -63,6 +69,7 @@ Save memory **immediately** — do not wait for the user to ask, do not wait for
    - **Filename:** `project_phase_checkpoint_<phase>_YYYY-MM-DD.md` (e.g. `project_phase_checkpoint_sa_2026-05-20.md`)
    - **frontmatter:** `phase: sa|ux|fe` + `status: in_progress` → change to `complete` when handoff is done
    - **content:** primary artifact the next phase needs — spec for ux, design plan for fe, implementation summary for verify
+10. **Skill invoke corrected by user** ("ไม่ใช่ sa", "ควรเป็น fe", "debug ไม่ใช่ fe") → save `feedback_skill_trigger_*` to global memory immediately with: phrase used + wrong skill + correct skill; distill pipeline consolidates into `skill_trigger_vocabulary.md`
 
 ### Save where?
 
@@ -123,6 +130,7 @@ All sections below work as one system, not as independent rules.
 - A step can be skipped only when **its input already exists** (e.g. clear spec → skip sa; no UI changes → skip ux)
 - Every step must **hand off an artifact the next step can actually use** (see Handoff contracts in each skill's SKILL.md)
 - **If no row matches** — ask 1 question first: "Do you need [spec / design / implementation] or which step to start from?" Never guess and pick the wrong pipeline
+- **Ambiguous Thai phrases** (ช่วยดู / ช่วยทำ / ลอง / ปรับ / แก้ไข / เพิ่ม / เปลี่ยน — with no context object) → always call `AskUserQuestion` with 2-4 skill options; never assume
 
 ---
 
