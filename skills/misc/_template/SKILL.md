@@ -40,7 +40,7 @@ Or working on a task that:
    - grep tag/keyword matching current task → apply lesson before starting
    - quote applied entry in reasoning (e.g., "per learnings#vue-destructure-loses-reactivity use toRefs")
    - if no matching entry → note "no matching learning — fresh start"
-4. **Read relevant code** — do not analyze from assumptions (see "หลักความรอบคอบขั้นสูงสุด" in CLAUDE.md)
+4. **Read relevant code** — do not analyze from assumptions (see "Highest caution" in CLAUDE.md)
 5. **Define scope** — if scope is larger than expected → tell user before proceeding
 
 ---
@@ -86,7 +86,7 @@ Do not report "done / complete / 0 left" before completing every item:
 - [ ] **Cross-verify ≥ 2 patterns** — e.g., scan with loose + strict regex, results must match (see `feedback_grep_multiline_attrs.md`)
 - [ ] **Manual spot-check 2-3 spots** — read real files to confirm scan result
 - [ ] **Build/compile verify** (if code changed) — `tsc --noEmit` + Vite compile (see `feedback_dangling_tag_after_wrapper_removal.md`)
-- [ ] **Trace caller ≥ 1 hop** before claiming "dead code" / "safe" (see CLAUDE.md "ความรอบคอบขั้นสูงสุด")
+- [ ] **Trace caller ≥ 1 hop** before claiming "dead code" / "safe" (see CLAUDE.md "Highest caution")
 - [ ] **Update project memory** if a new pattern worth preventing is found — add `feedback_<topic>.md` + link in MEMORY.md
 - [ ] **Update skill learnings** at `~/.claude/skills/<skill-name>/learnings.md` if the lesson generalizes across projects — append new entry per format (newest on top); do not dump project-specific business rules (those go to project memory)
 

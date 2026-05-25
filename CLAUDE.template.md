@@ -1,242 +1,248 @@
 @RTK.md
 
-# Universal Phase 0 — ทุก task ทุก project ทุกคำสั่ง
+# Universal Phase 0 — Every task, every project, every command
 
-> **กฎสากลที่บังคับใช้ก่อนทุกอย่าง** — ไม่ว่า task ใหญ่/เล็ก, ไม่ว่าจะเรียก skill หรือไม่, ไม่ว่าอยู่ project ไหน
+> **Universal rule enforced before everything** — regardless of task size, whether a skill is invoked, or which project you're in.
 >
-> Phase 0 นี้คือ **layer ฐาน** ของระบบ — ถ้า task เรียก skill, Phase 0 ของ skill นั้นจะ **extend** (เพิ่ม skill learnings) ไม่ใช่ replace
+> This Phase 0 is the **base layer** of the system — if a task invokes a skill, that skill's Phase 0 will **extend** (add skill learnings), not replace this one.
 
-## 1. Load memory hierarchy (mandatory — ทำเป็นอันแรกเสมอ)
+## 1. Load memory hierarchy (mandatory — always run first)
 
-โหลดตามลำดับ 2 ชั้น (global → project):
+Load in order, 2 tiers (global → project):
 
 ### Global memory — `~/.claude/memory/MEMORY.md`
-- Cross-project lessons + user preference + workflow convention ที่ใช้ทุก project
-- ถ้ามีไฟล์ → filter entries ที่ `metadata.scope: global` + relevant กับงาน
-- ถ้าไม่มี → ข้าม + หมายเหตุใน reasoning
+- Cross-project lessons + user preferences + workflow conventions used across all projects
+- If file exists → filter entries with `metadata.scope: global` + relevant to the task
+- If file missing → skip + note in reasoning
 
 ### Project memory — `~/.claude/projects/<id>/memory/MEMORY.md`
-- `<id>` = working directory แปลงเป็น project id โดยแทน `/` ด้วย `-`
+- `<id>` = working directory converted to project id by replacing `/` with `-`
   - working dir `/Users/X/Project/Y` → id `-Users-X-Project-Y`
   - working dir `/Users/X` (home) → id `-Users-X`
-- Project-specific patterns, history, finding, constraint
-- ถ้าไม่มี → ข้าม + หมายเหตุ "ไม่มี project memory"
+- Project-specific patterns, history, findings, constraints
+- If missing → skip + note "no project memory"
 
 ### Phase checkpoint — `~/.claude/projects/<id>/memory/project_phase_checkpoint_*.md`
-- หลังโหลด project memory → scan ไฟล์ที่ชื่อ `project_phase_checkpoint_*.md` ใน folder เดียวกัน
-- ถ้าเจอ checkpoint ที่ `status: in_progress` → echo ให้ user เห็น + ถามว่าจะ **resume** (โหลด artifact จาก checkpoint ต่อ) หรือ **เริ่มใหม่** (mark checkpoint เป็น `abandoned`)
-- ถ้าไม่มี checkpoint หรือทุก checkpoint เป็น `status: complete` → ข้าม
+- After loading project memory → scan for files named `project_phase_checkpoint_*.md` in the same folder
+- If a checkpoint with `status: in_progress` is found → echo it to the user + ask whether to **resume** (load artifact from checkpoint) or **start fresh** (mark checkpoint as `abandoned`)
+- If no checkpoint or all checkpoints are `status: complete` → skip
 
 ## 2. Echo & Conflict check
 
-- Echo top 3-5 entries ที่ relevant กลับให้ user เห็น **ก่อน** เริ่มงาน — format บังคับ: `[type] slug — one-line hook` **ห้ามเกิน 1 บรรทัดต่อ entry ห้าม quote body ของ entry**
-- ถ้า memory บอกเคยทำผิด → ระบุชัดว่าจะหลีกเลี่ยงยังไง (1 บรรทัด)
-- ถ้า propose สิ่งที่ขัด memory → **หยุดถาม user ก่อน** อย่าทำเงียบๆ
-- ถ้าไม่มี memory เกี่ยวข้องเลย → หมายเหตุสั้น "ไม่มี memory ตรง — fresh start"
+- Echo top 3-5 relevant entries back to the user **before** starting work — required format: `[type] slug — one-line hook` **max 1 line per entry, never quote the entry body**
+- If memory records a past mistake → state explicitly how you will avoid it (1 line)
+- If proposing something that conflicts with memory → **stop and ask the user first**, never proceed silently
+- If no relevant memory at all → short note: "no relevant memory — fresh start"
 
-## 2.5 Token efficiency (mandatory — ใช้ทุก skill ทุก turn)
+## 2.5 Token efficiency (mandatory — applies to every skill, every turn)
 
-- **Quality gate output:** แสดงเฉพาะ item ที่ **fail**; ถ้าทุกข้อผ่าน → `✅ quality gates passed` (1 บรรทัด) ห้ามแสดง checklist เต็มเมื่อไม่มี failure
-- **Handoff output:** สรุปเป็น bullet ≤ 10 จุด; ถ้า artifact ยาว → compress เป็น key-value ไม่ใช่ prose
-- **Shell commands:** `yarn` และ `npm` ไม่ถูก RTK filter อัตโนมัติ → ใช้ `rtk proxy yarn ...` / `rtk proxy npm ...` เสมอ; `pnpm` ใช้ `rtk proxy pnpm ...` เช่นกัน
+- **Quality gate output:** show only items that **fail**; if all pass → `✅ quality gates passed` (1 line). Never print the full checklist when there's no failure
+- **Handoff output:** summarize as ≤ 10 bullets; for long artifacts, compress into key-value form, not prose
+- **Shell commands:** `yarn` and `npm` are NOT auto-filtered by RTK → always use `rtk proxy yarn ...` / `rtk proxy npm ...`; same for `pnpm` → `rtk proxy pnpm ...`
 
-## 3. Evaluate decision matrix → เลือก skill
+## 3. Evaluate decision matrix → pick skill
 
-ดูตาราง "Quick decision matrix" ใน Skill orchestration section ด้านล่าง:
-- จับคู่ intent ของ user กับ skill ที่เหมาะสม
-- เข้าข้อยกเว้น (config / docs / typo / คำถามทั่วไป) → ไม่เรียก skill, ทำตรงๆ
-- เรียก skill → skill จะทำ **Phase 0.5** เพิ่มเอง (load `~/.claude/skills/<skill>/learnings.md`)
+Refer to the "Quick decision matrix" table in the Skill orchestration section below:
+- Match user intent to the appropriate skill
+- Falls under an exception (config / docs / typo / general question) → do not invoke a skill, handle directly
+- Invoking a skill → that skill will run **Phase 0.5** itself (loads `~/.claude/skills/<skill>/learnings.md`)
 
-## 4. Universal save triggers (mandatory — บังคับ save ระหว่าง turn)
+## 4. Universal save triggers (mandatory — force save mid-turn)
 
-Save memory **ทันที** ไม่รอ user สั่ง ไม่รอจบ session เมื่อเจอเหตุการณ์เหล่านี้:
+Save memory **immediately** — do not wait for the user to ask, do not wait for session end — when any of these events occur:
 
-1. **User แก้ทาง / บอกผิด** — ("ไม่ใช่แบบนั้น", "เปลี่ยนเป็น...", "stop") → save `feedback_*` + **Why** + **How to apply**
-2. **User confirm pattern ที่ไม่ obvious** — ("ใช่ ถูกแล้ว", accept approach แปลกๆ โดยไม่ push back) → save ว่า validated
-3. **เจอ error / ข้อผิดพลาด ทุกประเภท** — runtime, type, logic, approach ล้มเหลว → save root cause + วิธีที่ถูก
-4. **งานสำเร็จด้วย approach ใหม่ที่ใช้ได้จริง** → save pattern ที่ใช้ซ้ำได้
-5. **เจอ bug ที่หาที่มาได้** → save root cause + ripple list (ทุกไฟล์ที่อาจซ้ำ pattern)
-6. **เจอ constraint ที่ไม่ได้อยู่ในโค้ด** — "API rate limit X", "field deprecated" → save `project_*`
-7. **แก้ pattern เดิมซ้ำ ≥ 2 ครั้ง** ในงานเดียว — แก้ซ้ำ = ต้อง save แล้ว
-8. **เมื่อ session ยาว** (> 20 turn หรือโหลดไฟล์ขนาดใหญ่หลายไฟล์ติดกัน) → save lesson ที่ค้างอยู่ทันที อย่ารอ compact ก่อน เพราะเมื่อ compact เกิดขึ้นแล้วสาย
-9. **หลัง pipeline phase เสร็จ** (sa / ux / fe จบแต่ละ phase) → save phase artifact ลง project memory ก่อน handoff ด้วยรูปแบบ:
-   - **ชื่อไฟล์:** `project_phase_checkpoint_<phase>_YYYY-MM-DD.md` (เช่น `project_phase_checkpoint_sa_2026-05-20.md`)
-   - **frontmatter:** `phase: sa|ux|fe` + `status: in_progress` → เปลี่ยนเป็น `complete` เมื่อ handoff เสร็จแล้ว
-   - **content:** artifact หลักที่ phase ถัดไปต้องใช้ — spec สำหรับ ux, design plan สำหรับ fe, implementation summary สำหรับ verify
+1. **User corrects direction / says wrong** — ("not like that", "change to...", "stop") → save `feedback_*` + **Why** + **How to apply**
+2. **User confirms a non-obvious pattern** — ("yes, that's right", accepts unusual approach without pushback) → save as validated
+3. **Any error / mistake encountered** — runtime, type, logic, approach failure → save root cause + correct approach
+4. **Task succeeded with a new approach that actually works** → save as reusable pattern
+5. **Bug found with traceable root cause** → save root cause + ripple list (all files that may repeat the pattern)
+6. **Constraint found that isn't in the code** — "API rate limit X", "field deprecated" → save `project_*`
+7. **Same pattern corrected ≥ 2 times** in one task — repeated correction = must save
+8. **When session is long** (> 20 turns or many large files loaded in sequence) → save pending lessons immediately; don't wait for compaction — once it happens it's too late
+9. **After a pipeline phase completes** (sa / ux / fe each phase done) → save phase artifact to project memory before handoff, using this format:
+   - **Filename:** `project_phase_checkpoint_<phase>_YYYY-MM-DD.md` (e.g. `project_phase_checkpoint_sa_2026-05-20.md`)
+   - **frontmatter:** `phase: sa|ux|fe` + `status: in_progress` → change to `complete` when handoff is done
+   - **content:** primary artifact the next phase needs — spec for ux, design plan for fe, implementation summary for verify
 
-### Save ไปที่ไหน?
+### Save where?
 
-| Lesson ประเภท | ปลายทาง |
+| Lesson type | Destination |
 |---|---|
 | User behavior / preference / cross-project rule | **Global** `~/.claude/memory/` |
 | Project-specific pattern / finding / constraint | **Project** `~/.claude/projects/<id>/memory/` |
-| Skill-internal pitfall (Vue reactivity, Tailwind JIT, OWASP pattern) ที่ใช้ได้ทุก project | **Skill learnings** `~/.claude/skills/<skill>/learnings.md` |
-| ขัดกับ rule ที่อยู่ใน CLAUDE.md แล้ว | **ไม่ save** — restate ซ้ำ = ขยะ |
+| Skill-internal pitfall (Vue reactivity, Tailwind JIT, OWASP pattern) applicable across all projects | **Skill learnings** `~/.claude/skills/<skill>/learnings.md` |
+| Conflicts with a rule already in CLAUDE.md | **Do not save** — restating duplicates = noise |
 
-## 5. Skip rules (เมื่อข้าม Phase 0 ได้บางส่วน)
+## 5. Skip rules (when part of Phase 0 can be skipped)
 
-- **Trivial conversational task** (ทักทาย, ถาม CLI flag, ขอ explanation 1 บรรทัด): glance MEMORY.md เร็วๆ — ถ้าไม่มี entry relevant ก็ตอบได้เลยโดยไม่ต้อง echo
-- **Task ที่ touch code / file / shared state**: ห้าม skip — บังคับ load + echo เต็มขั้นตอน
+- **Trivial conversational task** (greeting, asking a CLI flag, requesting a 1-line explanation): glance MEMORY.md quickly — if no relevant entry, answer directly without echoing
+- **Task that touches code / file / shared state**: never skip — mandatory full load + echo
 
-ห้าม skip เพราะ "งานเล็กไม่น่าจะมี memory" — bug เกิดบ่อยที่สุดตรงงานที่คิดว่าเล็ก
+Never skip because "it's a small task, unlikely to have memory" — bugs happen most often in tasks that seem small.
 
 ---
 
 # Skill orchestration — sa / ux / fe + migrate / debug
 
-โปรเจกต์ frontend ทุกตัวใช้ skill 3 ตัวประสานกันเป็น pipeline หลัก — `sa` (คิดก่อน) → `ux` (ออกแบบ) → `fe` (เขียนโค้ด) — เสริมด้วย 2 skill เฉพาะทาง:
-- **`migrate`** — bulk transformation หลายไฟล์ (legacy → new pattern)
-- **`debug`** — diagnose runtime error / unexpected behavior, หา root cause ไม่ใช่ symptom
+Every frontend project uses 3 core skills as the main pipeline — `sa` (think first) → `ux` (design) → `fe` (write code) — supplemented by 2 specialist skills:
+- **`migrate`** — bulk transformation across many files (legacy → new pattern)
+- **`debug`** — diagnose runtime errors / unexpected behavior, find root cause not symptom
 
-ทุก section ด้านล่างทำงานร่วมกันเป็นระบบเดียว ไม่ใช่ rule แยกอิสระ
+All sections below work as one system, not as independent rules.
 
 ---
 
 ## Quick decision matrix
 
-| Intent ของผู้ใช้ | Skill ที่ต้องเรียก | ลำดับ |
+| User intent | Skill to invoke | Order |
 |---|---|---|
-| "วิเคราะห์ / ตรวจ / audit / หา bug / หาช่องโหว่ / spec ระบบ" | `sa` | เดี่ยว |
-| "ปรับสี / spacing / animation / responsive / accessibility" (visual ล้วน) | `ux` | เดี่ยว |
-| "debug reactivity / refactor logic / แก้ schema / state ไม่ทำงาน" (logic ล้วน) | `fe` | เดี่ยว |
-| "redesign + refactor หน้านี้ (มี spec ชัดแล้ว)" | `ux` → `fe` | 2 ขั้น |
-| "implement หน้าใหม่จาก mockup" | `ux` → `fe` | 2 ขั้น |
-| "วิเคราะห์ requirement + ทำหน้าใหม่" | `sa` → `ux` → `fe` | 3 ขั้น |
-| "เพิ่ม feature ใหม่ที่ยังไม่รู้ field/flow" | `sa` → `ux` → `fe` | 3 ขั้น |
-| "ตรวจ security flow แล้ว fix" | `sa` → `fe` | 2 ขั้น (ข้าม ux) |
-| "วิเคราะห์ bug แล้วแก้" | `sa` → `fe` | 2 ขั้น (ข้าม ux) |
-| "เจอ error / runtime crash / X พัง / X ไม่ทำงาน + มี error stack" | `debug` | เดี่ยว |
-| "debug แล้วต้องการ redesign data model" | `debug` → `sa` → `fe` | 3 ขั้น |
-| "migrate / แปลง / refactor หลายไฟล์ตาม pattern" (เช่น native select → USelect) | `migrate` | เดี่ยว |
-| "migrate ที่ต้องเปลี่ยน data shape" | `sa` → `migrate` | 2 ขั้น |
-| คำสั่งสั้น / กำกวม / intent ไม่ชัดว่าต้องการ spec / design / code / ไม่รู้จะเริ่มขั้นไหน | ไม่เรียก skill | ถามก่อน 1 คำถาม แล้วกลับมาเลือก pipeline |
-| "config / package.json / docs / typo" | ไม่เรียก skill ใด | — |
+| "analyze / inspect / audit / find bug / find vulnerability / spec system" | `sa` | standalone |
+| "adjust color / spacing / animation / responsive / accessibility" (visual only) | `ux` | standalone |
+| "debug reactivity / refactor logic / fix schema / state not working" (logic only) | `fe` | standalone |
+| "redesign + refactor this page (spec already exists)" | `ux` → `fe` | 2 steps |
+| "implement new page from mockup" | `ux` → `fe` | 2 steps |
+| "analyze requirements + build new page" | `sa` → `ux` → `fe` | 3 steps |
+| "add new feature where fields/flow are unknown" | `sa` → `ux` → `fe` | 3 steps |
+| "audit security flow then fix" | `sa` → `fe` | 2 steps (skip ux) |
+| "analyze bug then fix" | `sa` → `fe` | 2 steps (skip ux) |
+| "encountered error / runtime crash / X broken / X not working + have error stack" | `debug` | standalone |
+| "after debug, need to redesign data model" | `debug` → `sa` → `fe` | 3 steps |
+| "migrate / convert / refactor many files by pattern" (e.g. native select → USelect) | `migrate` | standalone |
+| "migration that needs data shape change" | `sa` → `migrate` | 2 steps |
+| "verify a fix / confirm feature works / test in real app" | `verify` | standalone (after fe/debug) |
+| "run / launch app / open dev server / see screenshot" | `run` | standalone |
+| "simplify / reduce code / find duplication after fixing" | `simplify` | standalone (after fe) |
+| "review PR / code review / view PR #X" | `review` | standalone |
+| "security review of current branch / audit before merge" | `security-review` | standalone |
+| "perf audit / a11y audit / lighthouse score" | `audit` | standalone |
+| Short / ambiguous command / intent unclear (spec / design / code / unknown starting point) | invoke no skill | ask 1 question first, then return to pick pipeline |
+| "config / package.json / docs / typo" | invoke no skill | — |
 
-**กฎสากล:**
-- ลำดับ `sa → ux → fe` **ห้ามสลับ** — spec ต้องเสร็จก่อน design, design ต้องเสร็จก่อน code
-- ขั้นที่ skip ได้ คือขั้นที่ **input ของขั้นนั้นมีอยู่แล้ว** (เช่น มี spec ชัด → skip sa; ไม่มี UI เปลี่ยน → skip ux)
-- ทุกขั้นต้อง **handoff artifact ที่ขั้นถัดไปใช้ได้จริง** (ดู Handoff contracts ด้านล่าง)
-- **ถ้าไม่มีแถวตรง** — ถามก่อน 1 คำถาม: "ต้องการ [spec / design / implement] หรือเริ่มจากขั้นไหน?" อย่าเดาแล้วเลือก pipeline ผิด
+**Universal rules:**
+- Order `sa → ux → fe` **must never be reversed** — spec must finish before design, design before code
+- A step can be skipped only when **its input already exists** (e.g. clear spec → skip sa; no UI changes → skip ux)
+- Every step must **hand off an artifact the next step can actually use** (see Handoff contracts in each skill's SKILL.md)
+- **If no row matches** — ask 1 question first: "Do you need [spec / design / implementation] or which step to start from?" Never guess and pick the wrong pipeline
 
 ---
 
-## Trigger ของแต่ละ skill
+## Triggers per skill
 
-### `sa` — System Analyst + Security Audit (คิดก่อนเขียน / ตรวจหลังเขียน)
+### `sa` — System Analyst + Security Audit (think before writing / audit after writing)
 
-เรียกเมื่อ:
-- ผู้ใช้พูดถึง: วิเคราะห์, วิเคราะห์โปรเจ็ค, วิเคราะห์หน้านี้, วิเคราะห์ระบบ, วิเคราะห์ flow, วิเคราะห์ requirement, ตรวจสอบ, ตรวจหา, หา bug, หาช่องโหว่, audit, security, threat model, OWASP, vulnerability, IDOR, XSS, CSRF, SSRF, SQLi, analyze, find bug
-- ผู้ใช้พูดถึง: เก็บ requirement, สร้าง spec, use case, user story, sequence diagram, flow diagram, ER diagram, data model, API spec, state machine, edge case, acceptance criteria
-- ผู้ใช้ถาม "ระบบนี้ทำงานยังไง", "หน้านี้ทำอะไรบ้าง", "flow เป็นยังไง", "พร้อมขึ้น prod ไหม", "ปลอดภัยพอไหม"
-- งานที่ต้องเข้าใจระบบทั้งหมดก่อนตัดสินใจ — ไม่ใช่แก้ไฟล์ใดไฟล์หนึ่งตรงๆ
+Trigger when:
+- User mentions: analyze, inspect, audit, security, threat model, OWASP, vulnerability, IDOR, XSS, CSRF, SSRF, SQLi, find bug, find vulnerability
+- User mentions: gather requirements, create spec, use case, user story, sequence diagram, flow diagram, ER diagram, data model, API spec, state machine, edge case, acceptance criteria
+- User asks: "how does this system work?", "what does this page do?", "what's the flow?", "ready for prod?", "is it secure enough?"
+- Tasks that require understanding the full system before deciding — not editing a specific file directly
 
 ### `ux` — Visual / Interaction Design
 
-เรียกเมื่อ:
-- ผู้ใช้พูดถึง: ออกแบบ, ดีไซน์, design, redesign, ปรับ UI, ปรับหน้าตา, ทำให้สวย, ทันสมัย, modern, polish, responsive, mobile, layout, สี, ปุ่ม, animation, transition, ลูกเล่น, accessibility, mockup
-- กำลังจะแก้ `.vue` / `.tsx` / `.jsx` / `.html` / `.css` / `.scss` ในส่วน template / style / class
-- ผู้ใช้ส่ง mockup / รูป / Figma link
-- งาน implement หน้า/component ใหม่ที่มี UI
+Trigger when:
+- User mentions: design, redesign, adjust UI, improve appearance, make it look better, modern, polish, responsive, mobile, layout, color, button, animation, transition, accessibility, mockup
+- About to edit `.vue` / `.tsx` / `.jsx` / `.html` / `.css` / `.scss` in the template / style / class section
+- User sends mockup / image / Figma link → if Figma URL, run `mcp__figma__add_figma_file` immediately before designing (see Figma MCP section)
+- Task to implement a new page/component with UI
 
 ### `fe` — Frontend Code (logic / structure / type)
 
-เรียกเมื่อ:
-- ผู้ใช้พูดถึง: เขียนหน้า, สร้าง component, refactor, เขียน composable, store, API, schema, validate, fetch, state, reactivity, props, emit, type, TypeScript, Nuxt, Vue, valibot, Pinia, useState, useFetch, middleware, route guard, SSR, hydration
-- กำลังจะแก้ `.vue` / `.ts` / `.tsx` / `.js` / `.jsx` ในส่วน `<script>` / logic
-- งาน review โค้ดหา anti-pattern / dead code / naming / reactivity bug
-- เขียน/แก้ valibot schema, Pinia store, composable, server route
+Trigger when:
+- User mentions: write page, create component, refactor, write composable, store, API, schema, validate, fetch, state, reactivity, props, emit, type, TypeScript, Nuxt, Vue, valibot, Pinia, useState, useFetch, middleware, route guard, SSR, hydration
+- About to edit `.vue` / `.ts` / `.tsx` / `.js` / `.jsx` in the `<script>` / logic section
+- Task to review code for anti-patterns / dead code / naming / reactivity bugs
+- Writing/editing valibot schema, Pinia store, composable, server route
 
 ### `migrate` — Bulk transformation across many files
 
-เรียกเมื่อ:
-- ผู้ใช้พูดถึง: migrate, ย้าย, แปลง, refactor ทั้งโปรเจกต์, เปลี่ยน X เป็น Y ทุกที่, cleanup ทุกจุด, codemod, replace all
-- งานที่ pattern ซ้ำๆ กระจายหลายไฟล์ (เช่น native `<select>` → `USelect` ทั้งโปรเจกต์, inline schema → `shared/schemas/`, deprecated API → new API)
-- **ห้ามใช้** สำหรับงานแก้ไฟล์เดียว (ใช้ `fe` แทน) หรือออกแบบ pattern ใหม่ (ใช้ `sa` ก่อน)
+Trigger when:
+- User mentions: migrate, move, convert, refactor entire project, change X to Y everywhere, cleanup all occurrences, codemod, replace all
+- Work where a repeated pattern is scattered across many files (e.g. native `<select>` → `USelect` project-wide, inline schema → `shared/schemas/`, deprecated API → new API)
+- **Never use** for single-file edits (use `fe`) or designing new patterns (use `sa` first)
 
 ### `debug` — Bug diagnosis & fix
 
-เรียกเมื่อ:
-- ผู้ใช้พูดถึง: debug, bug, พัง, error, ไม่ทำงาน, แปลกๆ, ทำไม X, หา root cause, diagnose, วินิจฉัย, ปุ่มกดไม่ติด, page กระพริบ, loop infinite
-- ผู้ใช้ส่ง error stack / log / screenshot ของ console error
-- บังคับ trace ไป **root cause** ไม่ใช่แก้ symptom; scan ripple ของ pattern เดียวกันที่อื่น
+Trigger when:
+- User mentions: debug, bug, broken, error, not working, strange behavior, why X, find root cause, diagnose, button not responding, page flickering, infinite loop
+- User sends error stack / log / screenshot of console error
+- Must trace to **root cause** not symptom; scan ripple of the same pattern elsewhere
 
 ---
 
 ## Pipeline: `sa → ux → fe → verify`
 
-`sa` (spec) → `ux` (design) → `fe` (code) → `verify` — handoff checklist อยู่ใน SKILL.md ของแต่ละ skill
+`sa` (spec) → `ux` (design) → `fe` (code) → `verify` — handoff checklist is in each skill's SKILL.md
 
-**กฎไหลลื่น:**
-- ขั้นถัดไปเริ่มจาก artifact ของขั้นก่อน ไม่เริ่มจากศูนย์
-- ux/fe เจอช่องว่างใน spec → yield กลับ sa ก่อน อย่าเดา
-- fe เจอ design implement ไม่ได้ → yield กลับ ux ปรับ ไม่ hack
-- ทุกขั้น echo สิ่งที่รับมา (1 บรรทัด) ก่อนต่อ
-
----
-
-## Mid-task yield (สลับ skill กลางทาง)
-
-ระหว่างทำงานในขั้นใดขั้นหนึ่ง ถ้าเจอประเด็นที่อยู่นอก scope ของ skill ปัจจุบัน — **หยุด, ระบุประเด็น, แล้ว yield ให้ skill ที่เหมาะสม** ไม่ทำต่อด้วย skill ผิด
-
-ตัวอย่าง:
-- กำลัง `fe` แล้วพบช่องโหว่ security → **yield ไป `sa` mode B audit** ก่อน fix
-- กำลัง `ux` แล้วพบว่า requirement ไม่ครบ (ไม่รู้ว่า empty state ควร render อะไร) → **yield ไป `sa` mode A** เพื่อเก็บ spec ก่อน design
-- กำลัง `sa` วิเคราะห์ bug แล้วเจอว่ารากปัญหาคือ reactivity → **yield ไป `fe` review mode** ลงรายละเอียดโค้ด
-
-**กฎ yield:**
-- บอกผู้ใช้ตรงๆ ว่ากำลัง yield ไปไหน เพราะอะไร (1 บรรทัด)
-- ทำขั้นที่ yield ไปให้จบก่อนกลับมาที่ skill เดิม
-- เมื่อกลับมา — apply ผลลัพธ์ของ yield (อย่าทำเหมือนไม่เคย yield)
+**Flow rules:**
+- Each step starts from the previous step's artifact, never from zero
+- ux/fe encounters a spec gap → yield back to sa first, never guess
+- fe finds a design that can't be implemented → yield back to ux to adjust, never hack
+- Every step echoes what it received (1 line) before continuing
 
 ---
 
-## ความรอบคอบขั้นสูงสุด (cross-skill rule)
+## Mid-task yield (switch skill mid-task)
 
-หลัก **"แก้จุดเดียว → bug อีกจุด"** ห้ามเกิดเด็ดขาด — บังคับใช้ทั้ง 3 skill
+While working in any step, if an issue outside the current skill's scope is found — **stop, identify the issue, then yield to the appropriate skill** — never continue with the wrong skill.
 
-ก่อน **ตรวจ / เสนอแก้ / implement** สิ่งที่ touch โค้ดเดิม:
+Examples:
+- Running `fe` and finds a security vulnerability → **yield to `sa` mode B audit** before fixing
+- Running `ux` and finds spec is incomplete (unknown what empty state should render) → **yield to `sa` mode A** to gather spec before designing
+- Running `sa` analyzing a bug and finds the root cause is reactivity → **yield to `fe` review mode** to go into code detail
 
-1. **trace caller / consumer** — `rg "symbol"` ทั้งโปรเจกต์ ดูว่ามีใครพึ่ง symbol/type/state นี้บ้าง
-2. **trace shared invariant** — มี shared state, type, schema, route gate ที่ใช้ร่วมกันไหม?
-3. **trace persistence** — ค่าเก่าใน localStorage / DB / cache จะ corrupt ไหมถ้า shape เปลี่ยน?
-4. **trace cross-tab / cross-page sync** — `storage` event listener / WebSocket / SSE ที่ broadcast change ไหม?
-5. **list ripple files** — ทุกไฟล์ที่ต้องแก้พร้อมกัน ระบุชัดก่อนเริ่มแก้
-
-ดูรายละเอียดเต็มที่ skill `sa` section "หลักความรอบคอบขั้นสูงสุด" — `fe` กับ `ux` ก็ต้องทำตามหลักนี้เมื่อ touch โค้ดเดิม
-
----
-
-## ข้อยกเว้นทั่วไป (ไม่เรียก skill)
-
-- งาน config (Nuxt config, package.json, env, CI/CD)
-- งาน docs / markdown ล้วน
-- งาน backend ล้วนที่ไม่ใช่ frontend stack
-- คำถามทั่วไปที่ตอบได้จากความรู้สากลโดยไม่ต้องอ่านโค้ด
-- แก้ typo / comment / formatting เล็กน้อย
+**Yield rules:**
+- Tell the user clearly where you are yielding and why (1 line)
+- Complete the yielded step before returning to the original skill
+- On returning — apply the yield's result (never act as if the yield didn't happen)
 
 ---
 
-## Skill memory loop — ทำให้ skill ฉลาดขึ้นเรื่อยๆ
+## Highest caution (cross-skill rule)
 
-> Load/save logic หลักอยู่ที่ **Universal Phase 0** ด้านบนสุดของไฟล์นี้ — section นี้เก็บเฉพาะ skill-specific convention
+**"Fix one spot → break another"** must NEVER happen — enforced across all 3 skills.
 
-### Memory hierarchy (3 ชั้น)
+Before **inspecting / proposing a fix / implementing** anything that touches existing code:
 
-| ชั้น | Path | Scope | โหลดเมื่อ |
+1. **trace caller / consumer** — prefer `mcp__codegraph__callers <symbol>` (semantic graph, instant); fallback to `rg "symbol"` for symbols created this session (index lag ~1-2s) or literal string patterns
+2. **trace shared invariant** — is there shared state, type, schema, or route gate in use?
+3. **trace persistence** — will old values in localStorage / DB / cache corrupt if the shape changes?
+4. **trace cross-tab / cross-page sync** — any `storage` listeners / WebSocket / SSE that broadcast changes?
+5. **list ripple files** — every file that must change together, named explicitly before starting
+
+Full details in the `sa` skill section "Highest caution" — `fe` and `ux` must follow this same principle whenever touching existing code.
+
+---
+
+## General exceptions (do not invoke a skill)
+
+- Config tasks (Nuxt config, package.json, env, CI/CD)
+- Docs / pure markdown work
+- Pure backend work that isn't part of the frontend stack
+- General questions answerable from universal knowledge without reading code
+- Trivial typo / comment / formatting fixes
+
+---
+
+## Skill memory loop — make skills smarter over time
+
+> Core load/save logic lives in **Universal Phase 0** at the top of this file — this section covers only skill-specific conventions
+
+### Memory hierarchy (3 tiers)
+
+| Tier | Path | Scope | Loaded when |
 |---|---|---|---|
-| **Global** | `~/.claude/memory/` | Cross-project, user preference, workflow rule | ทุก task (Universal Phase 0) |
-| **Project** | `~/.claude/projects/<id>/memory/` | Project-specific finding/pattern/constraint | ทุก task (Universal Phase 0) |
-| **Skill learnings** | `~/.claude/skills/<skill>/learnings.md` | Cross-project per-skill pitfall (Vue reactivity, Tailwind JIT, OWASP pattern) | เฉพาะเมื่อ skill ถูกเรียก (SKILL.md Phase 0.5) |
+| **Global** | `~/.claude/memory/` | Cross-project, user preference, workflow rule | Every task (Universal Phase 0) |
+| **Project** | `~/.claude/projects/<id>/memory/` | Project-specific finding/pattern/constraint | Every task (Universal Phase 0) |
+| **Skill learnings** | `~/.claude/skills/<skill>/learnings.md` | Cross-project per-skill pitfall (Vue reactivity, Tailwind JIT, OWASP pattern) | Only when skill is invoked (SKILL.md Phase 0.5) |
 
 ### Save triggers
-ดู **Universal Phase 0 #4** ด้านบน (8 triggers + ตารางว่า save ไปที่ไหน)
+See **Universal Phase 0 #4** above (9 triggers + table of where to save)
 
 ### Load logic
-ดู **Universal Phase 0 #1-2** ด้านบน (global → project → echo → conflict check)
+See **Universal Phase 0 #1-2** above (global → project → echo → conflict check)
 
-### Skill tag convention ใน memory frontmatter
+### Skill tag convention in memory frontmatter
 
-เมื่อ save memory ใหม่ → ใส่ field `skill:` ใน `metadata` เพื่อให้ Phase 0 ของ skill filter ได้:
+When saving a new memory → set the `skill:` field in `metadata` so each skill's Phase 0 can filter:
 
 ```yaml
 ---
@@ -244,33 +250,358 @@ name: feedback-uselect-empty-value
 description: ...
 metadata:
   type: feedback
-  skill: fe              # หรือ sa, ux, debug, migrate
-  topic: nuxt-ui         # optional: เพิ่ม keyword สำหรับ filter
+  skill: fe              # or sa, ux, debug, migrate
+  topic: nuxt-ui         # optional: extra filter keyword
 ---
 ```
 
-ค่าที่ใช้ได้ใน `skill:`
-- `fe` — ผูกกับ frontend code logic / pattern
-- `ux` — ผูกกับ visual / design / interaction
-- `sa` — ผูกกับ requirement / spec / security
-- `debug` — ผูกกับ bug pattern / root cause / runtime error
-- `migrate` — ผูกกับ bulk migration / codemod
-- `cross` — ใช้ได้หลาย skill (เช่น `feedback_verify_before_claiming_done`)
+Allowed values for `skill:`
+- `fe` — frontend code logic / patterns
+- `ux` — visual / design / interaction
+- `sa` — requirement / spec / security
+- `debug` — bug pattern / root cause / runtime error
+- `migrate` — bulk migration / codemod
+- `cross` — applicable to multiple skills (e.g. `feedback_verify_before_claiming_done`)
 
-**กฎ:** ถ้าไม่ใส่ skill tag → default เป็น `cross` (ทุก skill เห็น) — แต่ควรใส่ให้ชัดเสมอเพื่อ filter ได้
+**Rule:** if the skill tag is omitted → defaults to `cross` (visible to every skill) — but always set it explicitly for proper filtering
 
-### Graduation pipeline — promote ของซ้ำขึ้น tier
+### Graduation pipeline — promote repeated lessons up a tier
 
 ```
 project memory (specific to one project)
-    ↓ ถ้าเกิดซ้ำ ≥ 2 projects
+    ↓ if recurring across ≥ 2 projects
 global memory (~/.claude/memory/ — cross-project rule)
-    ↓ ถ้าเกิดซ้ำ ≥ 3 projects กับ skill เดียวกัน
+    ↓ if recurring across ≥ 3 projects with the same skill
 skill learnings (~/.claude/skills/<skill>/learnings.md — per-skill rule)
-    ↓ ถ้า rule load-bearing พอจน skill ต้องบังคับใช้ทุกครั้ง
-SKILL.md rule (เขียนลง skill เลย)
+    ↓ if the rule is load-bearing enough that the skill must always enforce it
+SKILL.md rule (write directly into the skill)
     ↓
-ลบ tier ต้นทางเมื่อ promote — เพราะรวมไว้ใน tier บนแล้ว ไม่ duplicate
+delete the source tier on promotion — already covered by the higher tier, no duplication
 ```
 
-ผู้ใช้รัน `/distill-memory` (manual) เพื่อ review + promote — Claude ไม่ promote เองอัตโนมัติ (เสี่ยง drift)
+User runs `/distill-memory` (manual) to review + promote — Claude does NOT promote automatically (drift risk)
+
+---
+
+# Chrome DevTools MCP integration — runtime observation layer
+
+> **MCP `chrome-devtools` is Claude's "eyes + hands" in the browser** — transforms skills from "writing code blind" → "observe runtime + verify for real" for tasks touching UI / runtime behavior
+>
+> This section is mandatory for **both built-in skills (verify / run / security-review) that can't be edited directly** + **custom skills (debug / ux / audit / fe)** that have their own integration section
+
+## When to open the browser (trigger map)
+
+| Trigger | Skill | Primary tool |
+|---|---|---|
+| User requests verify / before declaring done when UI was touched | `verify` / all skills | `navigate_page` → `click` → `take_snapshot` → `list_console_messages` |
+| Error stack / runtime crash / X broken / X not working | `debug` | reproduce → `list_console_messages` + `list_network_requests` + `evaluate_script` |
+| User requests to open app / "show me it running" | `run` | `new_page` → `navigate_page` → `take_screenshot` |
+| After finishing a style batch / before claiming ux done | `ux` | `take_screenshot` + `resize_page` + `emulate` + (optional) `lighthouse_audit` |
+| User requests perf / a11y audit | `audit` | `lighthouse_audit` + `performance_start_trace`/`stop`/`analyze_insight` + `take_memory_snapshot` |
+| Reviewing code that touches auth / cookie / CSP / CORS | `security-review` | `list_network_requests` (header) + `evaluate_script` (cookie/CSP) + `get_console_message` |
+| Verifying reactivity / hydration / memory leak | `fe` (opt-in) | `evaluate_script` + `list_console_messages` + `take_memory_snapshot` |
+
+**Do not open browser when:** spec/requirement (`sa` mode A), static codemod (`migrate`), backend-only logic, config/docs, typo, simplify, init
+
+## Token cost reference (know the price before choosing a tool)
+
+MCP token impact varies widely — know the price before choosing:
+
+| Tool | Token cost | Use when |
+|---|---|---|
+| `take_snapshot` of large dashboard page | 15-20k 🔴 | Need uid of element to interact |
+| `take_snapshot` of small page | 5-10k 🟡 | Need uid + a11y tree |
+| `take_screenshot` (viewport) | 1-3k 🟢 | Need to see page / proof |
+| `lighthouse_audit` (1 category) | 3-5k 🟡 | Check a11y/perf score |
+| `lighthouse_audit` (all categories) | 10-15k 🔴 | Forbidden unless user asks for full audit |
+| `performance_analyze_insight` (5s trace) | 5-10k 🟡 | Diagnose initial load |
+| `performance_analyze_insight` (30s trace) | 15-30k 🔴 | Forbidden unless steady-state issue |
+| `list_console_messages` | 500-2k 🟢 | Explore console |
+| `list_network_requests` | 500-5k 🟢 | Explore network |
+| `evaluate_script` | 100-2k 🟢 | Inspect specific value |
+| `get_console_message <i>` / `get_network_request <id>` | 200-500 🟢 | Know index/id, narrow lookup |
+| `take_memory_snapshot` | 2-5k 🟡 | Diagnose memory leak |
+
+**Principle:** open browser only when necessary (verify / reproduce / proof) — never on every turn that touches UI
+
+## Broad-vs-narrow decision rule (mandatory — apply before every browser tool call)
+
+> **Core rule:** explore broad first, narrow later — never narrow from the start if you don't know what to ask
+
+Before **every** browser tool call, answer one question internally: "Do I know what to look for?"
+
+| Situation | Answer | Tool to use |
+|---|---|---|
+| Know exactly what to check (have hypothesis) | ✅ Yes — narrow | `evaluate_script` / `get_console_message` / `get_network_request` |
+| Don't know, need to explore first (strange bug, first time on this page) | ❌ No — broad first | `take_snapshot` / `take_screenshot` / `list_console_messages` |
+| Need proof to show user | ✅ Yes — but visual | `take_screenshot` |
+| Check visual regression | ✅ Yes — but context | `take_screenshot` (full page) |
+
+**Mandatory:** never use `evaluate_script` blindly on first debug — wrong query will miss the bug. Use a broad tool once to see the overall picture, then narrow.
+
+## Token-saving toolkit (mandatory — apply on every browser tool call)
+
+### 🟢 Safe-always (use anytime, no trade-off)
+
+1. **Combine multiple checks in a single `evaluate_script`** — atomic state + ~80% savings
+   ```js
+   evaluate_script("JSON.stringify({
+     state: <inspect 1>,
+     errors: <inspect 2>,
+     network: <inspect 3>
+   })")
+   ```
+
+2. **Use `get_*` instead of `list_*` when index/id is known** — `get_console_message <i>`, `get_network_request <id>`
+
+3. **`wait_for` a specific selector before observing** — prevents flake + reduces re-snapshots
+
+4. **Specify Lighthouse category** — `category=performance` or `category=accessibility` separately (never run all 5 unless user asks for full audit)
+
+5. **Performance trace 3-5 seconds + `reload: true`** — never exceed 10s unless diagnosing a steady-state issue
+
+6. **Close page when task ends** — `close_page` before session ends
+
+### 🟡 Context-dependent (use only in the stated context)
+
+7. **Cache uid across calls** — OK for **static elements** (nav, header, app shell); **never** for list/dynamic/reactive components → re-snapshot whenever a component may remount
+
+8. **Element-only screenshot (`uid=X`)** — use for component spec check; **never** for visual regression (needs full page)
+
+9. **Batch actions before observing** — use for **success-path verify**; **never** during step-by-step debug (hides intermediate bugs)
+
+10. **Same-page `navigate_page` instead of `new_page`** — use for continuous flow; **never** when isolation testing is required (auth, fresh state)
+
+### 🔴 Avoid-by-default (forbidden unless truly necessary)
+
+11. **`take_snapshot` on every step** — only when a fresh uid is needed; **never** as a replacement for screenshot
+12. **`take_snapshot` on a large dashboard page** (> 50 components) — use a targeted `evaluate_script` query instead
+13. **Lighthouse on every page** — pick 2-3 key pages (landing/dashboard/form) only
+14. **Screenshot after every click** — observe only when you expect to have reached the target state
+
+## Decision flow (mandatory — walk this flow before every tool call)
+
+```
+1. Do I know what to check?
+   ├─ No → 1 broad tool call (snapshot/screenshot/list_*) → return to #1
+   └─ Yes → go to #2
+
+2. Which tool fits best?
+   ├─ runtime value → evaluate_script (combine checks)
+   ├─ console error → get_console_message <i> or list_console_messages
+   ├─ network fail → get_network_request <id> or list_network_requests
+   ├─ visual proof → take_screenshot
+   └─ need to interact → take_snapshot (for uid) then cache
+
+3. Is the tool on the 🔴 avoid list?
+   ├─ Yes → return to #2, pick alternative
+   └─ No → call
+
+4. After call: did you get the data needed?
+   ├─ Yes → continue
+   └─ No → refine query (do NOT re-snapshot immediately)
+```
+
+## Quality preservation (prevent optimization from breaking quality)
+
+Token-saving rules **do not reduce quality** when the decision rule above is followed. But forcing narrow from the start causes:
+
+- **Missed bug** from wrong query direction → always broad first
+- **Stale uid click** → re-snapshot whenever DOM may change
+- **Layout regression invisible** → use full-page screenshot for visual regression
+- **Intermediate bug hidden** → never batch during debug
+
+If the user says "why didn't you see the bug" / "verify passed but it's broken in real run" / "why didn't you catch it" = optimization was too aggressive → return to broad scan + interrogate root cause
+
+## Fallback when MCP is unavailable
+
+If MCP `chrome-devtools` is offline / dev server isn't running / user disabled MCP — fall back in order:
+
+1. Ask user to paste screenshot / console log instead (manual capture is more accurate for real-env visual state)
+2. For verify → say plainly: "verify is code-level only (tsc + test) — not tested in a real browser". Never blanket-claim done
+3. For debug → ask user for steps to reproduce + browser/version
+
+## Manual paste vs MCP — use together, not either-or
+
+- **Manual paste is more accurate for:** the user's real state (auth, cookie, prod data), env-specific bugs, user context (arrows, "this part")
+- **MCP is more accurate for:** structural DOM (uid + a11y tree), runtime state (JS/network/console), reproduce + verify fix, responsive testing
+- **Best workflow:** manual paste → start understanding the bug; MCP → dig out root cause + verify fix
+
+## Skill integration reference
+
+Custom skills with their own chrome-devtools section (read each skill's SKILL.md for specifics):
+- `debug/SKILL.md` — reproduce + inspect runtime state instead of guessing from stack
+- `ux/SKILL.md` — visual verification + responsive + a11y after a style batch
+- `audit/SKILL.md` — lighthouse + perf trace + memory snapshot
+- `fe/SKILL.md` — opt-in for reactivity/hydration verification
+
+Built-in skills (verify / run / security-review) — use the trigger map + token discipline above as the guide, since these skills can't be edited directly
+
+---
+
+# CodeGraph MCP integration — codebase intelligence layer
+
+> **MCP `codegraph` is the "semantic map" of the codebase** — transforms ripple checks from line-by-line grep → semantic graph traversal that knows call paths, impact, and callers instantly
+>
+> This section is mandatory for **every skill that needs a ripple check** (sa / fe / debug / migrate) before editing existing code
+
+## Trigger map (which tool to use, when)
+
+| Trigger | Skill | Tool |
+|---|---|---|
+| Ripple check before editing an existing symbol | all skills | `mcp__codegraph__callers <symbol>` |
+| View call path / trace A calls B calls C | `debug` Step 2 | `mcp__codegraph__trace <symbol>` |
+| Understand what this file/component does + connects to | `sa` mode A | `mcp__codegraph__context <file>` |
+| Find a symbol whose name is uncertain | all skills | `mcp__codegraph__search <keyword>` |
+| Analyze impact if this symbol changes | `sa` / `fe` | `mcp__codegraph__impact <symbol>` |
+| View symbol details (type, location, signature) | all skills | `mcp__codegraph__node <symbol>` |
+| View source of multiple symbols at once | `sa` / `migrate` | `mcp__codegraph__explore <sym1> <sym2>` |
+| View what this symbol calls (outgoing) | `fe` / `debug` | `mcp__codegraph__callees <symbol>` |
+
+## Decision rule (rg vs codegraph)
+
+| Situation | Tool |
+|---|---|
+| Symbol created in this session (index lag ~1-2s) | `rg` always |
+| Literal string / comment / non-code text | `rg` always |
+| Existing symbol + need semantic callers | `mcp__codegraph__callers` first |
+| Critical + high-risk change | cross-verify both: `mcp__codegraph__impact` + `rg` |
+
+## Project index (must init before use in each project)
+
+```bash
+codegraph init -i   # run once in the project root dir
+```
+
+If not yet initialized → tools will error or return empty → fallback to `rg` immediately + tell user to run init
+
+## Token cost reference
+
+| Tool | Token cost | Use when |
+|---|---|---|
+| `codegraph__callers` | ~200-500 🟢 | Ripple check before every symbol change |
+| `codegraph__trace` | ~200-500 🟢 | Call path from crash site |
+| `codegraph__search` | ~100-300 🟢 | Symbol discovery |
+| `codegraph__impact` | ~500-1k 🟡 | High-risk or cascading change |
+| `codegraph__context` | ~1-3k 🟡 | Understanding a file's role |
+| `codegraph__explore` | ~1-5k 🟡 | Multi-symbol source dump |
+
+## Quality rules
+
+- Never declare "no ripple" from `codegraph__callers` alone if the change is critical (type contract / auth gate) — cross-verify with `rg` too
+- If `codegraph__callers` returns empty + the symbol should have callers → suspect stale index → run `rg` then tell user to run `codegraph init -i` again
+- If project has no `.codegraph/codegraph.db` → do not reference codegraph — fallback to `rg` + tell user to init first
+
+## Skill integration reference
+
+Skills with their own CodeGraph section:
+- `sa/SKILL.md` — context loading + impact analysis in reference tracing checklist
+- `fe/SKILL.md` — callers check before touching existing code
+- `debug/SKILL.md` — trace call path in Step 2 + callers in Step 6
+- `migrate/SKILL.md` — callers discovery in Phase 0 Discover
+
+---
+
+# Context7 MCP integration — live library documentation layer
+
+> **MCP `context7` is the "live docs" layer** — fetches real documentation for external libraries by version, injecting it into the prompt instead of relying on stale training data
+>
+> This section is mandatory for `fe` + `debug` + `migrate` + `sa` when the task involves **external library APIs** — not internal code
+
+## Trigger map (which tool to use, when)
+
+| Trigger | Skill | Tool |
+|---|---|---|
+| Writing code using a new external library API (Nuxt UI, Valibot, Pinia, useFetch) | `fe` | `resolve-library-id` → `query-docs` |
+| Error pointing to library behavior / breaking change | `debug` Step 4a | `query-docs <error pattern>` |
+| Migrating between library versions | `migrate` Phase 0 | `resolve-library-id` → `query-docs "migration guide"` |
+| Specifying API that depends on external library (opt-in) | `sa` mode A | `query-docs <API feature>` |
+
+## Tool names
+
+- `mcp__context7__resolve-library-id` — convert library name → Context7-compatible library ID
+- `mcp__context7__query-docs` — fetch docs by library ID + query
+
+## Decision rule (query vs skip)
+
+| Situation | Action |
+|---|---|
+| Library is internal / custom package | ❌ skip — no index |
+| Pattern already exists in `learnings.md` | ⚠️ skip — cached |
+| Library in default stack + unfamiliar new API | ✅ query |
+| Error may be caused by library version change | ✅ query always |
+| Migrating library major/minor version | ✅ query always |
+
+## Token cost reference
+
+| Tool | Token cost | Note |
+|---|---|---|
+| `resolve-library-id` | ~100-200 🟢 | Run once per library per session |
+| `query-docs` (narrow query) | ~500-2k 🟢 | Keep query specific — "UButton loading prop" not "all of Nuxt UI" |
+| `query-docs` (broad query) | ~2-10k 🔴 | Forbidden — adds tokens unnecessarily |
+
+## Quality rules
+
+- **Always query narrow** — 1 specific feature per call; never query just the library name
+- **1 library per call** — never combine queries for multiple libraries in one call
+- Library not in index → fallback to official docs from training data + tell user
+- Confirmed patterns → save to `~/.claude/skills/<skill>/learnings.md` to skip querying next time
+
+## Skill integration reference
+
+- `fe/SKILL.md` — query before implementing new library-specific API
+- `debug/SKILL.md` — query in Step 4a when hypothesis involves library breaking change
+- `migrate/SKILL.md` — query in Phase 0 Discover when migrating library version
+- `sa/SKILL.md` — query opt-in when spec depends on external library API
+
+---
+
+# Figma MCP integration — design source layer
+
+> **MCP `figma` is the "design source" layer** — loads Figma design directly into context + views thumbnails of specific nodes + reads/writes design comments
+>
+> This section is mandatory for `ux` primarily + `sa` for requirement gathering from Figma comments
+
+## Tool signatures (real — from schema)
+
+| Tool | Required params | Returns |
+|---|---|---|
+| `mcp__figma__add_figma_file` | `url` (Figma file URL) | Design structure + file_key loaded into context |
+| `mcp__figma__view_node` | `file_key`, `node_id` (`<n>:<n>`) | **Thumbnail image** of that node |
+| `mcp__figma__read_comments` | `file_key` | All comments on the file |
+| `mcp__figma__post_comment` | `file_key`, `message`, `x`, `y` (+ optional `node_id`) | Posts comment at coordinate |
+| `mcp__figma__reply_to_comment` | `file_key`, `comment_id`, `message` | Reply to existing comment |
+
+**Extract params from URL:**
+- `file_key` — from `figma.com/file/<file_key>/...` or `figma.com/design/<file_key>/...`
+- `node_id` — from URL param `?node-id=<n>-<n>` → convert `-` to `:` → `<n>:<n>`
+
+## Trigger map (which tool to use, when)
+
+| Trigger | Skill | Tool |
+|---|---|---|
+| User sends Figma URL (first time in session) | `ux` | `add_figma_file` — load full design structure first |
+| Need visual of a specific component | `ux` | `view_node` (specify narrow node_id) |
+| Read design comments / feedback | `sa` / `ux` | `read_comments` |
+| Reply or post comment on Figma | `sa` | `reply_to_comment` / `post_comment` — **always notify user first** |
+
+## Decision rule
+
+| Situation | Action |
+|---|---|
+| User sends Figma URL | ✅ `add_figma_file` always — gets structured design data |
+| Need visual confirmation of component after add | `view_node` with specific node_id only |
+| Figma requires auth / incorrect URL | ❌ fallback → ask user for screenshot + description |
+| Need live visual of Figma | `take_screenshot` via chrome-devtools on the Figma URL |
+
+## Quality rules
+
+- **Always `add_figma_file` first** when encountering a new Figma URL — never skip, even if "you think you know it"
+- **`view_node` specifies a specific node** not the root node of the full page — cost grows with subtree size
+- **Figma values are source of truth** — spacing/color/font from design → use directly, never estimate
+- **Before post/reply comment** → notify user first every time, because it is visible to other designers
+
+## Skill integration reference
+
+- `ux/SKILL.md` — `add_figma_file` before designing from Figma + `view_node` to confirm specific components
+- `sa/SKILL.md` — `read_comments` to gather requirements from design feedback

@@ -238,7 +238,7 @@ Propose as **small patches one spot at a time** — do not overhaul unless neces
 - [ ] **Convention check** — matches design system / theme config, no parallel pattern created
 - [ ] **Vite compile** (if template edited) — `curl /<page>` HTTP 200 + dev log has no `Invalid end tag`
 - [ ] **Reka UI item value** (USelect/USelectMenu) — items have no `value: ""` / `value: ''` (scan both single + double quote)
-- [ ] **Responsive test** at **375 / 390 / 768 / 1024 / 1440px** — MCP `resize_page` + screenshot (preferred) หรือ user screenshot fallback
+- [ ] **Responsive test** at **375 / 390 / 768 / 1024 / 1440px** — MCP `resize_page` + screenshot (preferred) or user screenshot fallback
 - [ ] no unintended horizontal scroll
 - [ ] tap target ≥ 44×44 mobile
 - [ ] text does not overflow/overlap at any breakpoint
@@ -251,77 +251,77 @@ Propose as **small patches one spot at a time** — do not overhaul unless neces
 
 ---
 
-## Chrome DevTools MCP playbook (visual verification หลังแก้ style)
+## Chrome DevTools MCP playbook (visual verification after style changes)
 
-> เปิดใช้เมื่อมี MCP `chrome-devtools` พร้อม + งานแก้ visual / responsive / a11y — token discipline ดูใน `~/.claude/CLAUDE.md`
+> Enable when MCP `chrome-devtools` is available + the task involves visual / responsive / a11y changes — token discipline see `~/.claude/CLAUDE.md`
 
 ### When to open browser
 
-- **หลังแก้ style จบ 1 batch** (ไม่ใช่ทุก edit!) — verify visual จริงก่อน claim done
-- **ก่อน handoff ux → fe** — confirm design intent ใน browser
-- **ตอน implement responsive plan** — ทดสอบทุก breakpoint จริง ไม่ใช่เดา
-- **ตอน a11y review** (Mode 2) — vendor lighthouse score แทนตรวจ manual
+- **After finishing a style batch** (not every edit!) — verify visuals before claiming done
+- **Before handoff ux → fe** — confirm design intent in browser
+- **When implementing responsive plan** — test every real breakpoint, do not guess
+- **During a11y review** (Mode 2) — vendor lighthouse score instead of manual inspection
 
-### Visual verification flow (มาตรฐาน)
+### Visual verification flow (standard)
 
 ```
-1. navigate_page <localhost url ของหน้าที่แก้>
-2. wait_for <selector ที่บ่งบอกว่าโหลดเสร็จ>
+1. navigate_page <localhost url of the edited page>
+2. wait_for <selector indicating load complete>
 3. take_screenshot                                  ← desktop default 1280
 4. resize_page 375 → take_screenshot               ← mobile
 5. resize_page 768 → take_screenshot               ← tablet
 6. resize_page 1440 → take_screenshot              ← wide desktop
-7. (ถ้ามี hover/focus state) hover uid=X → take_screenshot
-8. close_page เมื่อจบ
+7. (if hover/focus state exists) hover uid=X → take_screenshot
+8. close_page when done
 ```
 
-### Tool selection guide (token-aware — `take_screenshot` first, ไม่ใช่ `take_snapshot`)
+### Tool selection guide (token-aware — `take_screenshot` first, not `take_snapshot`)
 
-| ต้องการอะไร | Tool | Token cost | กฎใช้ |
+| Need | Tool | Token cost | Rule |
 |---|---|---|---|
-| ดูหน้าตา + เทียบ mockup | `take_screenshot` | 1-3k | **default ของ ux** |
-| ทดสอบ breakpoint | `resize_page` + `take_screenshot` | 1-3k/ครั้ง | ทำทุก breakpoint หลัก |
-| ทดสอบ device จริง | `emulate` (mobile/tablet) + screenshot | 1-3k | iPhone/iPad emulation |
-| ตรวจ a11y score + violation | `lighthouse_audit` (a11y category) | 3-10k | Mode 2 review ใช้ทุกครั้ง |
-| ตรวจ hover / focus state | `hover uid=X` → `take_screenshot` | 6-23k | ต้องการ uid → snapshot ก่อน |
-| ตรวจ contrast / computed CSS | `evaluate_script "getComputedStyle(...)"` | 100-500 | สำหรับสงสัยว่า class apply ไหม |
-| ❌ Visual + structural | `take_snapshot` | 5-20k | **ห้าม** ใช้แทน screenshot |
+| View appearance + compare mockup | `take_screenshot` | 1-3k | **ux default** |
+| Test breakpoint | `resize_page` + `take_screenshot` | 1-3k/each | Do for every key breakpoint |
+| Test real device | `emulate` (mobile/tablet) + screenshot | 1-3k | iPhone/iPad emulation |
+| Check a11y score + violations | `lighthouse_audit` (a11y category) | 3-10k | Mode 2 review — always |
+| Check hover / focus state | `hover uid=X` → `take_screenshot` | 6-23k | Need uid → snapshot first |
+| Check contrast / computed CSS | `evaluate_script "getComputedStyle(...)"` | 100-500 | When unsure if class is applied |
+| ❌ Visual + structural | `take_snapshot` | 5-20k | **Forbidden** as screenshot replacement |
 
-### Responsive testing recipe (แทน DevTools manual)
+### Responsive testing recipe (replaces manual DevTools)
 
 ```
-ทุกหน้าที่แก้ style → loop:
-- 375 (iPhone SE) → screenshot → ตรวจ no horizontal scroll, tap target ≥ 44
-- 390 (iPhone 14)  → screenshot → ตรวจ text overflow
-- 768 (iPad)      → screenshot → ตรวจ layout transition
-- 1024 (iPad Pro)  → screenshot → ตรวจ sidebar/nav switch
-- 1440 (desktop)   → screenshot → ตรวจ max-width cap
+For every page with style changes → loop:
+- 375 (iPhone SE) → screenshot → check no horizontal scroll, tap target ≥ 44
+- 390 (iPhone 14)  → screenshot → check text overflow
+- 768 (iPad)      → screenshot → check layout transition
+- 1024 (iPad Pro)  → screenshot → check sidebar/nav switch
+- 1440 (desktop)   → screenshot → check max-width cap
 ```
 
-ใส่ผลใน progress tracker `Responsive plan` พร้อม screenshot link หรือ "verified at 375/768/1024/1440"
+Add results to progress tracker `Responsive plan` with screenshot link or "verified at 375/768/1024/1440"
 
 ### A11y audit recipe (Mode 2 review)
 
 ```
 1. navigate_page <url>
 2. lighthouse_audit category=accessibility
-3. อ่าน violations list → คัด blocker (color contrast, missing aria, focus trap)
-4. แต่ละ violation: evaluate_script ตรวจ element จริง → quote class/attribute ที่ผิด
-5. รายงาน severity + file:line + fix proposal
+3. read violations list → filter blockers (color contrast, missing aria, focus trap)
+4. per violation: evaluate_script check real element → quote class/attribute that is wrong
+5. report severity + file:line + fix proposal
 ```
 
-### Anti-patterns เฉพาะ MCP สำหรับ ux
+### Anti-patterns (MCP for ux)
 
-- **`take_snapshot` แทน `take_screenshot`** — ux care visual, ไม่ care DOM uid; ใช้ snapshot เฉพาะตอนต้อง interact
-- **Screenshot ทุก edit** — 1 batch = 1 round screenshot พอ; ไม่ใช่ทุก class change
-- **เปิด browser แต่ไม่ทดสอบ responsive** — manual test ที่ desktop เฉยๆ = ไม่ได้ verify
-- **Run lighthouse บนทุกหน้าทุก task** — เปิดเฉพาะ Mode 2 review หรือก่อน production claim
+- **`take_snapshot` instead of `take_screenshot`** — ux cares about visual, not DOM uid; use snapshot only when need to interact
+- **Screenshot every edit** — 1 batch = 1 round of screenshots; not every class change
+- **Opening browser without testing responsive** — testing only at desktop = not verified
+- **Running lighthouse on every page every task** — only for Mode 2 review or before production claim
 
-### Fallback เมื่อ MCP ใช้ไม่ได้
+### Fallback when MCP is unavailable
 
-- ขอ user ส่ง screenshot จากทุก breakpoint ที่ระบุ
-- ขอ user เปิด DevTools → toggle device → ส่ง screenshot
-- บอกตรงๆ ว่า "design verified แค่ code-level — ไม่ได้ test ใน browser"
+- Ask user to send screenshots from every specified breakpoint
+- Ask user to open DevTools → toggle device → send screenshot
+- State plainly: "design verified at code-level only — not tested in browser"
 
 ---
 

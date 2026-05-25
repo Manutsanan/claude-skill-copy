@@ -343,82 +343,82 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 
 ---
 
-## Chrome DevTools MCP playbook (opt-in — สำหรับ runtime verification)
+## Chrome DevTools MCP playbook (opt-in — runtime verification)
 
-> เปิดใช้เฉพาะเมื่อ MCP `chrome-devtools` พร้อม + งานต้อง verify runtime behavior — **ไม่ใช่ default ของ fe** เพราะ logic ส่วนใหญ่ verify ด้วย `tsc` + test ก็พอ
+> Enable only when MCP `chrome-devtools` is available + the task requires verifying runtime behavior — **not the fe default** because most logic can be verified with `tsc` + tests
 
 ### When to open browser (opt-in trigger)
 
-| สถานการณ์ | ทำไม MCP คุ้ม |
+| Situation | Why MCP is worth it |
 |---|---|
-| Refactor reactivity / state — สงสัยว่า reactivity bug | `tsc` ไม่จับ reactivity lost; ต้อง click + inspect state จริง |
-| แก้ hydration mismatch | Error อยู่ใน console runtime, static check มองไม่เห็น |
-| Verify composable side-effect / cleanup | `onScopeDispose` ทำงานไหม → ต้องทำ action + ตรวจ |
-| สงสัย memory leak (modal open/close repeat) | ต้อง `take_memory_snapshot` เทียบ heap |
-| UI changed → ก่อน claim done | golden path verify (replace "ขอ user ลอง") |
+| Refactor reactivity / state — suspected reactivity bug | `tsc` doesn't catch reactivity lost; need to click + inspect real state |
+| Fix hydration mismatch | Error lives in runtime console, invisible to static check |
+| Verify composable side-effect / cleanup | Does `onScopeDispose` fire? → need to perform action + check |
+| Suspected memory leak (modal open/close repeat) | Need `take_memory_snapshot` to compare heap |
+| UI changed → before claiming done | Golden path verify (replaces "ask user to try") |
 
-**ไม่ใช้ MCP สำหรับ:** เขียน schema, type, composable design pattern, valibot validation — verify ด้วย test สั้นกว่า
+**Do not use MCP for:** writing schema, type, composable design pattern, valibot validation — verify with tests, it's faster
 
 ### Verification recipes (token-aware)
 
-**A. Reactivity verify (refactor แล้วต้องการมั่นใจ):**
+**A. Reactivity verify (after refactor, need confidence):**
 ```
-1. navigate_page <url ของ component นั้น>
+1. navigate_page <url of that component>
 2. wait_for <element>
-3. ทำ action ที่ควร trigger reactivity (click button / change input)
-4. evaluate_script "ดู computed/ref ค่าเปลี่ยนตามไหม"
-5. list_console_messages — ดู warning เช่น `[Vue warn] Mutating a prop`
+3. perform action that should trigger reactivity (click button / change input)
+4. evaluate_script "check if computed/ref value changed"
+5. list_console_messages — look for warnings like `[Vue warn] Mutating a prop`
 ```
 
 **B. Hydration mismatch verify:**
 ```
 1. navigate_page <url>
 2. list_console_messages → grep "Hydration"
-3. ถ้าเจอ → evaluate_script เทียบ value ที่ render
-4. ตรวจ source: locale-dependent date, Math.random(), Date.now() ใน setup
+3. if found → evaluate_script compare rendered value
+4. inspect source: locale-dependent date, Math.random(), Date.now() in setup
 ```
 
 **C. Memory leak verify (composable cleanup):**
 ```
 1. take_memory_snapshot ← baseline
-2. ทำ action 5-10 รอบ (e.g. open/close modal ที่ใช้ composable)
+2. perform action 5-10 times (e.g. open/close modal using composable)
 3. take_memory_snapshot ← after
-4. heap growth > 5MB / detached listener > 10 = leak; ตรวจ onScopeDispose
+4. heap growth > 5MB / detached listener > 10 = leak; check onScopeDispose
 ```
 
-**D. Golden path verify (แทน "ขอ user ลอง"):**
+**D. Golden path verify (replaces "ask user to try"):**
 ```
-1. navigate_page → click ตาม spec → fill form → submit
+1. navigate_page → click per spec → fill form → submit
 2. list_console_messages — clean
-3. list_network_requests — no 4xx/5xx unintended
+3. list_network_requests — no unintended 4xx/5xx
 4. take_screenshot — proof
 ```
 
-### Tool selection (lean — fe ไม่ care visual)
+### Tool selection (lean — fe does not care about visual)
 
-| ต้องการ | Tool | Token cost |
+| Need | Tool | Token cost |
 |---|---|---|
-| Console error / Vue warn | `list_console_messages` | 500-2k ⭐ default ของ fe |
+| Console error / Vue warn | `list_console_messages` | 500-2k ⭐ fe default |
 | Network fail | `list_network_requests` | 500-5k |
 | Inspect ref / computed / store | `evaluate_script` | 100-2k ⭐ verify reactivity |
-| Element มี + uid (ตอนจะ click) | `take_snapshot` | 5-20k — ใช้เท่าที่จำเป็น |
+| Element exists + uid (before clicking) | `take_snapshot` | 5-20k — use only when needed |
 | Memory leak | `take_memory_snapshot` ×2 | 4-10k |
-| Visual proof สำหรับ user | `take_screenshot` | 1-3k |
+| Visual proof for user | `take_screenshot` | 1-3k |
 
-**Rule:** fe ใช้ `list_console_messages` + `evaluate_script` เป็นหลัก — ไม่ default เป็น `take_snapshot`/`take_screenshot` แบบ ux
+**Rule:** fe defaults to `list_console_messages` + `evaluate_script` — not `take_snapshot`/`take_screenshot` like ux
 
-### Anti-patterns เฉพาะ MCP สำหรับ fe
+### Anti-patterns (MCP for fe)
 
-- **เปิด browser ทุก fe task** — fe = code logic; เปิดเฉพาะตอน verify runtime behavior
-- **Skip `tsc` + test แล้วใช้แต่ MCP** — MCP เสริม, ไม่แทน static check; `tsc` 0 errors มาก่อน
-- **`take_screenshot` แทน console check** — fe care ว่ามี warning ไหม, ไม่ใช่หน้าสวยไหม
-- **Verify ด้วย 1 click** — golden path ≥ 2 edge cases (empty, error) ก่อน claim done
+- **Opening browser for every fe task** — fe = code logic; open only for runtime behavior verification
+- **Skipping `tsc` + tests and using MCP only** — MCP supplements, does not replace static check; `tsc` 0 errors first
+- **`take_screenshot` instead of console check** — fe cares about warnings, not visual appearance
+- **Verifying with 1 click** — golden path ≥ 2 edge cases (empty, error) before claiming done
 
-### Fallback เมื่อ MCP ใช้ไม่ได้
+### Fallback when MCP is unavailable
 
-- ขอ user paste console log + steps to reproduce + screenshot
-- บอกตรงๆ "verify ด้วย tsc + test เท่านั้น — ไม่ได้ verify runtime"
-- อย่า claim "reactivity fix ทำงาน" ถ้ายังไม่ได้ test ใน browser
+- Ask user to paste console log + steps to reproduce + screenshot
+- State plainly: "verified with tsc + test only — runtime not verified"
+- Never claim "reactivity fix works" without testing in browser
 
 ---
 
@@ -466,8 +466,8 @@ mcp__context7__query-docs libraryId="/nuxt/ui" query="Nuxt UI"
 - [ ] **`rtk proxy yarn nuxt prepare`** succeeds (refresh auto-imports + types)
 
 ### UI verify (when UI changed)
-- [ ] golden path verified — `verify` skill หรือ chrome-devtools MCP playbook section D
-- [ ] edge cases ≥ 2 from spec (empty, error) — verify ใน browser จริง
+- [ ] golden path verified — `verify` skill or chrome-devtools MCP playbook section D
+- [ ] edge cases ≥ 2 from spec (empty, error) — verify in real browser
 - [ ] network tab clean — `list_network_requests` no unintended 4xx/5xx
 - [ ] console clean — `list_console_messages` no error/warn regression
 - [ ] mobile 375px not broken — `resize_page 375` + screenshot

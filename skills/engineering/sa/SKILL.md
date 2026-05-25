@@ -258,10 +258,10 @@ Goal: find **real exploitable vulnerabilities** — not abstract theory
 
 | Trigger | Mode |
 |---|---|
-| "วิเคราะห์ requirement", "spec", "use case", "flow" | A |
-| "ทำหน้าใหม่ที่ยังไม่รู้ field" | A (before ux + fe) |
-| "ตรวจ security", "audit auth", "หา vulnerability" | B |
-| "ปลอดภัยพอไหม", "พร้อม prod ไหม" | B (+ infra checklist) |
+| "analyze requirement", "spec", "use case", "flow" | A |
+| "build new page where fields/flow are unknown" | A (before ux + fe) |
+| "check security", "audit auth", "find vulnerability" | B |
+| "is it secure enough?", "ready for prod?" | B (+ infra checklist) |
 | Covers both | A → B |
 
 ---
