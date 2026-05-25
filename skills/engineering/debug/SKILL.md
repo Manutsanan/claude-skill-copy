@@ -109,6 +109,7 @@ Use **5 Whys** from symptom → mechanism → context → why-no-test → why-no
 - write **3–5 hypotheses** ranked by likelihood
 - single-hypothesis thinking = anchoring bias
 - cannot think of ≥ 3 = fail path not understood → back to Step 2
+- if any hypothesis involves "library API changed / deprecated / version mismatch" → query `mcp__context7__query-docs` with the error pattern **before** running experiments — confirms known breaking changes at ~500 tokens vs wasted experiment runs
 
 #### 4b. Falsify before test (run disproof first)
 

@@ -60,6 +60,7 @@ Migration progress:
 2. List all files + count per file
 3. **Classify:** single pattern or multiple shapes? mechanical or context-dependent?
 4. **Map dependencies:** which files reference which, what edit order is required
+5. **If migrating library version** → `mcp__context7__resolve-library-id` + `mcp__context7__query-docs "migration guide v{old} to v{new}"` before scanning — confirms official migration path and prevents migrating to an already-deprecated target pattern
 
 ### Phase 1 — Plan
 

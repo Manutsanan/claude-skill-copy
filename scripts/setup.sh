@@ -13,7 +13,8 @@ set -euo pipefail
 #   6. Install lint tooling (PostToolUse hook + Python venv)
 #   7. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
 #   8. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
-#   9. Print next steps + missing-dependency warnings
+#   9. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
+#  10. Print next steps + missing-dependency warnings
 #
 # Flags:
 #   --force           Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
@@ -21,6 +22,7 @@ set -euo pipefail
 #   --skip-mcp        Skip chrome-devtools MCP install (if you don't want browser automation)
 #   --skip-deps       Skip auto-install of system dependencies (rg, etc.)
 #   --with-codegraph  Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
+#   --with-context7   Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -30,6 +32,7 @@ SKIP_LINK=0
 SKIP_MCP=0
 SKIP_DEPS=0
 WITH_CODEGRAPH=0
+WITH_CONTEXT7=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
@@ -37,8 +40,9 @@ for arg in "$@"; do
     --skip-mcp) SKIP_MCP=1 ;;
     --skip-deps) SKIP_DEPS=1 ;;
     --with-codegraph) WITH_CODEGRAPH=1 ;;
+    --with-context7) WITH_CONTEXT7=1 ;;
     -h|--help)
-      sed -n '3,23p' "$0"
+      sed -n '3,24p' "$0"
       exit 0
       ;;
     *)
@@ -444,6 +448,44 @@ else
   echo "        cd /your/project && codegraph init -i"
 fi
 
+# ---------- 8. Context7 MCP (opt-in) ----------
+#
+# Adds live library documentation to fe/debug/migrate/sa:
+#   fe      — verify Nuxt UI / Valibot / Pinia API before implementing
+#   debug   — check known breaking changes when error involves library
+#   migrate — query migration guide before bulk transform
+#   sa      — verify external library API spec (opt-in)
+#
+# Opt-in (--with-context7) because it requires npx per invocation.
+# No binary install needed — Context7 runs via npx directly.
+
+if [ "$WITH_CONTEXT7" -eq 0 ]; then
+  note "Context7 MCP skipped (add --with-context7 to install)"
+else
+  note "Installing Context7 MCP (live library docs for fe/debug/migrate/sa)"
+
+  CLAUDE_JSON="$HOME/.claude.json"
+  if [ ! -f "$CLAUDE_JSON" ]; then
+    warn "~/.claude.json not found — add manually under mcpServers:"
+    echo '      "context7": {"type":"stdio","command":"npx","args":["-y","@upstash/context7-mcp@latest"]}'
+  elif ! command -v jq &>/dev/null; then
+    warn "jq not found — add manually to ~/.claude.json under mcpServers:"
+    echo '      "context7": {"type":"stdio","command":"npx","args":["-y","@upstash/context7-mcp@latest"]}'
+  elif jq -e '.mcpServers.context7' "$CLAUDE_JSON" >/dev/null 2>&1; then
+    ok "context7 MCP already registered in ~/.claude.json"
+  else
+    cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq '
+      .mcpServers //= {} |
+      .mcpServers.context7 = {"type":"stdio","command":"npx","args":["-y","@upstash/context7-mcp@latest"]}
+    ' "$CLAUDE_JSON" > "$tmp" && mv "$tmp" "$CLAUDE_JSON"
+    ok "context7 MCP registered in ~/.claude.json (backup saved)"
+    echo "      Restart Claude Code to pick up the new MCP server"
+    echo "      First call will download @upstash/context7-mcp via npx (one-time, ~5MB)"
+  fi
+fi
+
 # ---------- Summary ----------
 
 note "Done"
@@ -461,7 +503,11 @@ Next steps:
        ./scripts/setup.sh --with-codegraph
      Then init once per project: cd /your/project && codegraph init -i
 
-  4. Memory starts empty — that's expected. Lessons accumulate as you work.
+  4. (Optional) Install Context7 MCP for live library documentation:
+       ./scripts/setup.sh --with-context7
+     Queries real docs for Nuxt UI / Valibot / Pinia instead of using training data.
+
+  5. Memory starts empty — that's expected. Lessons accumulate as you work.
      Read CLAUDE.md sections "Save triggers" + "Graduation pipeline" for how it grows.
 
   5. Customize for your project: add a CLAUDE.md inside your project root with

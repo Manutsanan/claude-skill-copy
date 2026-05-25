@@ -39,6 +39,7 @@ fe progress:
 - [ ] Validation at boundaries only (valibot safeParse/parse)
 - [ ] Nuxt UI used before raw elements (where applicable)
 - [ ] Ripple traced (caller ≥ 1 hop): `mcp__codegraph__callers <symbol>` first; fallback `rg` for new-session symbols or literal patterns
+- [ ] Context7: library API verified (if implementing new Nuxt UI / Valibot / external lib feature)
 - [ ] Quality gates: tsc 0 errors + Vite compile + dev log clean
 - [ ] UI verify (if UI changed): golden path + ≥ 2 edge cases + 375px mobile
 - [ ] Memory updated (project pattern / skill learnings)
@@ -418,6 +419,34 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 - ขอ user paste console log + steps to reproduce + screenshot
 - บอกตรงๆ "verify ด้วย tsc + test เท่านั้น — ไม่ได้ verify runtime"
 - อย่า claim "reactivity fix ทำงาน" ถ้ายังไม่ได้ test ใน browser
+
+---
+
+## Context7 MCP integration (opt-in — library API verification)
+
+> Use when implementing **new** API from an external library — Nuxt UI props, Valibot methods, Pinia options, useFetch parameters. Skip if the pattern already exists in `fe/learnings.md`.
+
+### When to query
+
+| Situation | Action |
+|---|---|
+| First time using a specific Nuxt UI component prop | `resolve-library-id nuxt/ui` → `query-docs "/nuxt/ui <component> <prop>"` |
+| Valibot method with uncertain signature | `resolve-library-id fabian-hiller/valibot` → `query-docs "/fabian-hiller/valibot <method>"` |
+| Pattern already confirmed in `fe/learnings.md` | Skip — use cached pattern |
+| Internal custom composable / no external library | Skip |
+
+### Query discipline (narrow always)
+
+```
+# ✅ Good — ~500 tokens
+mcp__context7__resolve-library-id libraryName="nuxt/ui"
+mcp__context7__query-docs libraryId="/nuxt/ui" query="UButton loading prop"
+
+# ❌ Bad — ~5-10k tokens
+mcp__context7__query-docs libraryId="/nuxt/ui" query="Nuxt UI"
+```
+
+**After confirming pattern:** save to `~/.claude/skills/fe/learnings.md` → skip query on future occurrences.
 
 ---
 

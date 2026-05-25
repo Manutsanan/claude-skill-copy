@@ -110,6 +110,7 @@ For every symbol / function / type / state / route / schema:
 - [ ] trace persistence — localStorage / cookie / DB / cache — does shape change corrupt it?
 - [ ] trace cross-tab sync — can `storage` event / WS / SSE consumers parse the new shape?
 - [ ] trace route gates — middleware layers (defense-in-depth) that must be changed together
+- [ ] (opt-in) external library API used in spec → `mcp__context7__resolve-library-id` + `mcp__context7__query-docs "<feature>"` to verify current behavior before committing to spec
 
 ### Ripple questions (answer mentally before concluding — can't answer = trace more)
 
