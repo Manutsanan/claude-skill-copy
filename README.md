@@ -9,6 +9,7 @@
 - Project health audit 4 dimensions (perf / code quality / coverage / dependency)
 - Memory loop 3-tier ที่สะสม lessons ข้าม project + skill อัตโนมัติ
 - Phase checkpoint ที่ resume pipeline งานใหญ่ข้าม session ได้
+- **Semantic ripple check ผ่าน CodeGraph MCP** — รู้ทันทีว่า symbol ถูก call จากไหน + กระทบอะไร แทน grep ทั้ง project
 
 **Target audience:** developer ที่ใช้ Claude Code กับ frontend project (Nuxt / Vue / React / TypeScript) และอยากให้ Claude ทำงาน **สม่ำเสมอ ไม่ตามใจตัวเอง**
 
@@ -41,6 +42,7 @@ cd ~/Project/claude-skill-copy
   - [One-time bootstrap](#one-time-bootstrap)
   - [Lint tooling](#lint-tooling-skill--memory-frontmatter-validator)
   - [Browser automation (chrome-devtools MCP)](#browser-automation-chrome-devtools-mcp)
+  - [Codebase intelligence (CodeGraph MCP)](#codebase-intelligence-codegraph-mcp)
 - [How to use](#how-to-use)
 - [Skills reference](#skills-reference)
 - [Per-project CLAUDE.md](#per-project-claudemd)
@@ -56,13 +58,19 @@ cd ~/Project/claude-skill-copy
 
 Claude Code โดยตัวเองทำงานเก่ง แต่ **ไม่สม่ำเสมอ** — บางครั้งคิดก่อนเขียน บางครั้ง implement เลย; บางครั้ง verify หลายมุม บางครั้งเชื่อ scan รอบเดียว
 
-ระบบนี้แก้ด้วย 3 layer:
+ระบบนี้แก้ด้วย 3 layer + 3 MCP:
 
 | Layer | บังคับให้ Claude ทำอะไร |
 |---|---|
 | **Universal Phase 0** (`~/.claude/CLAUDE.md`) | โหลด memory + scan phase checkpoint + echo top entries + เลือก skill ตาม decision matrix **ก่อนทำงานทุกครั้ง** |
 | **Skill discipline** (`~/.claude/skills/<skill>/SKILL.md`) | แต่ละ skill มี workflow บังคับ (เช่น debug ต้องท่อง mantra + ranked hypotheses + falsify-first + ledger) |
 | **Memory loop** (3-tier hierarchy) | save lessons อัตโนมัติเมื่อเจอ trigger + promote เมื่อซ้ำข้าม project |
+
+| MCP | ทำอะไร | Skill ที่ใช้ |
+|---|---|---|
+| **RTK** (Rust Token Killer) | กรอง shell output → ลด token 60-90% | ทุก skill (via hook อัตโนมัติ) |
+| **chrome-devtools** | observe browser runtime — error, network, state, a11y | `debug` / `ux` / `fe` / `audit` |
+| **CodeGraph** | semantic codebase graph — callers, impact, trace, context | ทุก skill ที่ทำ ripple check |
 
 ผลคือ Claude ทำงานเหมือนมี checklist กำกับ — ไม่ค่อย hallucinate, ไม่ค่อยลืม edge case, ไม่ค่อยเคลม "เสร็จ" ก่อน verify
 
@@ -141,7 +149,7 @@ verify (run app + observe behavior + screenshot)
 
 **Cross-skill ripple check** — ก่อน touch โค้ดเดิม ทุก skill ต้อง:
 
-1. **trace caller / consumer** — `rg "symbol"` ทั้งโปรเจกต์
+1. **trace caller / consumer** — prefer `mcp__codegraph__callers <symbol>` (semantic, instant); fallback `rg "symbol"` สำหรับ symbol ใหม่ใน session หรือ literal string pattern
 2. **trace shared invariant** — shared state / type / schema / route gate?
 3. **trace persistence** — localStorage / DB / cache จะ corrupt ไหมถ้า shape เปลี่ยน?
 4. **trace cross-tab / cross-page sync** — `storage` event / WebSocket / SSE broadcast?
@@ -210,6 +218,7 @@ SKILL.md rule
 - **Auto-installed by setup.sh** (via brew/apt/dnf/yum/pacman): `ripgrep`, `python3`, `jq`, plus `chrome-devtools` MCP (via `claude mcp add`)
 - **Soft prerequisites (warn-only if missing):** Node.js 18+ (สำหรับ MCP), Chrome/Chromium (สำหรับ browser automation)
 - **Optional:** [RTK CLI](https://github.com/skarekrow/rtk) สำหรับ token saving บน shell commands
+- **Optional:** [CodeGraph](https://github.com/colbymchenry/codegraph) สำหรับ semantic ripple check (แทน grep) — ดู [install section](#codebase-intelligence-codegraph-mcp)
 
 ### One-time bootstrap
 
@@ -283,12 +292,68 @@ cd ~/Project/claude-skill-copy
 claude mcp list                       # ต้องเห็น "chrome-devtools"
 ```
 
+### Codebase intelligence (CodeGraph MCP)
+
+CodeGraph เพิ่ม semantic graph traversal ให้ ripple check ทุก skill — แทนที่ `rg "symbol"` ด้วย graph traversal ที่รู้ callers จริง, call path, และ cascading impact
+
+**1. Install binary:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install.sh | sh
+```
+
+**2. Register MCP** — เพิ่มใน `~/.claude.json` ที่ key `mcpServers`:
+```json
+"codegraph": {
+  "type": "stdio",
+  "command": "/Users/<you>/.local/bin/codegraph",
+  "args": ["serve", "--mcp"]
+}
+```
+
+**3. Init index ต่อ project** (รัน 1 ครั้งต่อ project):
+```bash
+cd /path/to/project
+codegraph init -i
+```
+
+สร้าง `.codegraph/codegraph.db` — index จะ auto-sync หลังจากนั้น (lag ~1-2s หลัง edit)
+
+**Tools ที่ได้ (namespaced เป็น `mcp__codegraph__*`):**
+
+| Tool | ใช้เมื่อ |
+|---|---|
+| `callers <symbol>` | Ripple check — ใครเรียก symbol นี้ (แทน grep) |
+| `impact <symbol>` | ถ้าแก้ symbol นี้จะกระทบอะไรบ้าง |
+| `trace <symbol>` | Call path จาก crash site → ต้นตอ (debug) |
+| `context <file>` | เข้าใจ file นี้ทำอะไร + เชื่อมกับอะไร (sa) |
+| `search <keyword>` | หา symbol ที่ไม่รู้ชื่อแน่ |
+| `explore <s1> <s2>` | ดู source หลาย symbol พร้อมกัน (migrate) |
+| `callees <symbol>` | symbol นี้ call อะไร (outgoing) |
+| `node <symbol>` | Symbol details — type, location, signature |
+
+**ROI ต่อ skill:**
+
+| Skill | What improves | Token cost |
+|---|---|---|
+| `sa` / `fe` | Ripple list เชิง semantic — ไม่มี comment/string noise | ~200-500 🟢 |
+| `debug` | Trace call chain จาก crash site ทันที | ~200-500 🟢 |
+| `migrate` | Discover scope ด้วย callers graph ก่อน regex | ~200-500 🟢 |
+| `sa` impact | วิเคราะห์ cascading effect ก่อน change | ~500-1k 🟡 |
+
+**Graceful degradation:** ถ้า project ยังไม่ได้ init → CodeGraph return empty → skill fallback `rg` อัตโนมัติ + แจ้ง user
+
+**Verify:**
+```bash
+codegraph --version                   # ต้องขึ้น version
+```
+
 ### Verify install
 
 ```bash
 ls -la ~/.claude/skills/         # ควรเห็น symlinks 7 ตัว → repo
 head ~/.claude/CLAUDE.md         # ต้องขึ้น "@RTK.md" + "Universal Phase 0"
 claude mcp list                  # ต้องเห็น "chrome-devtools" (ถ้าไม่ใช้ --skip-mcp)
+codegraph --version              # ถ้าติดตั้ง CodeGraph แล้ว
 ```
 
 เปิด Claude Code ใน project ใดก็ได้ ลอง:
@@ -646,6 +711,13 @@ grep -l "Universal save triggers" ~/.claude/CLAUDE.md
 ```
 
 ถ้าไม่ขึ้น → re-install: `./scripts/setup.sh --force`
+
+### CodeGraph tools ไม่ทำงาน / return empty
+
+1. เช็คว่า project มี index: `ls .codegraph/codegraph.db` — ถ้าไม่มี → `codegraph init -i`
+2. เช็ค binary อยู่ใน PATH: `which codegraph` — ถ้าไม่เจอ → ดู install path (`~/.local/bin/codegraph`) แล้วอัปเดต `~/.claude.json`
+3. Restart Claude Code เพื่อ reload MCP server ใหม่
+4. ถ้ายังไม่ทำงาน → skill จะ fallback `rg` ให้อัตโนมัติ — ไม่ crash
 
 ### Phase checkpoint ไม่ resume
 
