@@ -164,6 +164,13 @@ Can't produce a rationale — tell user it's underspecified, ask first
 - State machine (mermaid)
 - Edge case checklist (empty, max, concurrent, race, network fail, refresh mid-flow)
 
+**Output format preference:**
+- Estimated spec > 200 lines → prefer HTML file over markdown
+  - Benefits: dense, interactive, agent-browsable via Playwright MCP, collapsible sections
+  - Structure: collapsible `<details>` per use case, color-coded state machine, inline tables
+  - Filename convention: `spec-<feature>.html`
+- Estimated spec ≤ 200 lines → markdown is fine
+
 ### Output style
 
 - mermaid for every diagram
@@ -182,6 +189,7 @@ Can't produce a rationale — tell user it's underspecified, ask first
 - [ ] edge cases: empty / max / concurrent / refresh mid-flow / unauthorized
 - [ ] **ripple check** — where do new field/type changes hit consumers
 - [ ] **backward compat** — old data in storage with old shape has migration/fallback?
+- [ ] **Spec format check** — if output would exceed 200 lines, emit as HTML spec file instead of markdown
 - [ ] **Update skill learnings** if a lesson generalizes across projects (edge case pattern, state machine pitfall, question template)
 - [ ] do not declare "spec complete" before passing the checklist
 

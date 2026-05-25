@@ -31,6 +31,7 @@ Copy this block into your first response. Tick boxes as you go — do not declar
 UX progress:
 - [ ] Memory + theme config + existing components scanned
 - [ ] Mode picked (1: design from mockup / 2: review UI / 3: improve UX)
+- [ ] Design directions explored (4-5 HTML stubs) — or explicitly skipped with reason
 - [ ] Reusable components / utilities checked before writing new
 - [ ] Semantic HTML chosen before styling
 - [ ] Design system used before custom CSS
@@ -72,6 +73,16 @@ UX progress:
 ---
 
 ## Mode 1: Design from mockup
+
+**Step 0: Design direction exploration (when design is open-ended)**
+
+Before implementing a single direction — generate 4-5 lightweight HTML stubs with distinct design personalities:
+- Each stub: full-page or component layout, real Tailwind classes (CDN), named theme (e.g., `minimal`, `brutalist`, `tokyo-fintech`, `warm-card`, `data-dense`)
+- Each stub is independently openable in browser via MCP `navigate_page` — user clicks through to pick
+- User picks a direction; only then begin full implementation
+- Skip this step when: mockup is fully explicit (pixel-perfect spec given), or user says "implement as-is"
+
+Naming convention: `design-direction-<slug>.html` — save to project root or `/tmp/` for session use
 
 1. **Read every detail of the mockup** — color, font, size, spacing, radius, shadow, gradient — do not guess
 2. **Look for reusable components / utilities** in the project before writing new

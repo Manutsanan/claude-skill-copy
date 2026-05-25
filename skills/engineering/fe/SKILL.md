@@ -299,6 +299,49 @@ Don't quick-fix immediately if user only asked for review — report first, wait
 
 ---
 
+## Agent-native verification (for UI components)
+
+**Principle (from Anthropic internal practice):** embed verification into the artifact itself — not as a separate test file. Components expose their current state via `data-*` attributes so the agent reads DOM directly — no scraping, no guessing.
+
+### When to add data-* attributes
+
+Add on components that have:
+- Loading / error / empty / success states
+- Form validity or submission state
+- Item count / pagination
+- Auth / permission gates
+- Any state the `verify` skill or MCP needs to confirm
+
+### data-* contract convention
+
+```html
+<!-- Loading / async state -->
+<div data-state="loading | error | empty | success">
+
+<!-- Item count -->
+<ul data-item-count="5">
+
+<!-- Form -->
+<form data-form-valid="true | false" data-submitting="true | false">
+
+<!-- Auth gate -->
+<div data-auth="authenticated | guest | unauthorized">
+```
+
+**Rule:** breaking the `data-*` contract = verification failure — even if the app still works visually. This is intentional: contract integrity ≠ visual correctness.
+
+### 3-surface verification pattern
+
+| Surface | How | When |
+|---|---|---|
+| Human | Open browser, visually inspect | Manual QA / demo |
+| Agent (MCP) | `evaluate_script("document.querySelector('[data-state]').dataset.state")` | During fe quality gate |
+| Headless (CI) | `bun verify` / Playwright headless reads data attributes | Pre-merge pipeline |
+
+All 3 surfaces read the same DOM contract — no parallel test logic.
+
+---
+
 ## Chrome DevTools MCP playbook (opt-in — สำหรับ runtime verification)
 
 > เปิดใช้เฉพาะเมื่อ MCP `chrome-devtools` พร้อม + งานต้อง verify runtime behavior — **ไม่ใช่ default ของ fe** เพราะ logic ส่วนใหญ่ verify ด้วย `tsc` + test ก็พอ
@@ -399,6 +442,7 @@ Don't quick-fix immediately if user only asked for review — report first, wait
 - [ ] network tab clean — `list_network_requests` no unintended 4xx/5xx
 - [ ] console clean — `list_console_messages` no error/warn regression
 - [ ] mobile 375px not broken — `resize_page 375` + screenshot
+- [ ] **Agent-native contract** — key visual states expose `data-*` attributes (`data-state` / `data-item-count` / `data-form-valid`) readable via `evaluate_script`
 
 If dev server isn't ready → tell user "cannot verify manually — please test: [steps]" **never claim "done" silently**
 

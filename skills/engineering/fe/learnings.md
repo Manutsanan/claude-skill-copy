@@ -39,6 +39,18 @@
 
 <!-- newest on top -->
 
+## http-200-and-content-grep-is-not-visual-verify
+
+**Tags:** verify, pdf, advisor, false-confidence, layout
+**Date:** 2026-05-23
+
+**Context:** built a PDF receipt page from a Figma mockup; verified by `curl HTTP 200` + grep of expected Thai strings in rendered HTML — advisor caught a real bug in the same turn: table footer `<td colspan="4">` should have been `colspan="3"` so the "รวม / total_amount / total_remaining" cells aligned under the right column headers
+**Lesson:** content presence ≠ structural correctness. A page can return HTTP 200 with every expected string rendered and *still* be visually wrong (wrong colspan/rowspan, swapped column order, mis-aligned grid). HTTP 200 + grep only proves the page didn't crash and the data binding flowed — it proves nothing about layout fidelity to a mockup.
+**How to apply:**
+- When building from a mockup (Figma/PNG/PDF), the verify step must be **visual** — open in a browser and eyeball it against the mockup, or take a screenshot. Never substitute curl + grep.
+- For tables specifically — re-count colspan/rowspan against the visual cell grid before declaring done. The mockup's footer cells dictate colspan, not the data fields.
+- Call `advisor` *before* the visual verify (not after) when you can't visually verify yourself — advisor reads structure too and can catch the colspan-class bugs that curl can't.
+
 ## select-item-value-must-not-be-empty-string
 
 **Tags:** nuxt-ui, reka-ui, USelect, USelectMenu, runtime-error
