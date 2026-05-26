@@ -144,7 +144,7 @@ cd ~/Project/claude-skill-copy
 | 4 | ติดตั้ง lint hook (PostToolUse) |
 | 5 | Register playwright-chromium MCP (default browser) |
 
-**Flags:** `--force` · `--skip-link` · `--skip-deps` · `--skip-mcp` · `--with-codegraph` · `--with-context7` · `--with-playwright`
+**Flags:** `--force` · `--skip-link` · `--skip-deps` · `--skip-mcp` · `--with-playwright` (firefox+webkit) · `--with-chrome-devtools` · `--with-codegraph` · `--with-context7`
 
 ### Verify
 
