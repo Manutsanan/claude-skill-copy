@@ -258,7 +258,8 @@ head ~/.claude/CLAUDE.md   # must start with "@RTK.md" + "Universal Phase 0"
 **CodeGraph returning empty**
 ```bash
 ls .codegraph/codegraph.db   # if missing → codegraph init -i
-# SessionStart hook auto-inits projects with package.json on first session
+# SessionStart hook auto-inits projects with one of:
+#   package.json · pyproject.toml · go.mod · Cargo.toml · Gemfile · pom.xml · setup.py
 # skill auto-falls back to rg — no crash
 ```
 

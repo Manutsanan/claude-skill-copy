@@ -547,9 +547,9 @@ else
   fi
 
   # 7d. Register SessionStart hook — auto-init codegraph on first session in any project
-  #     Runs: [ -f package.json ] && [ ! -f .codegraph/codegraph.db ] && codegraph init -i .
-  #     Skips silently if package.json absent or db already exists — zero overhead.
-  AUTOINIT_CMD="[ -f package.json ] && [ ! -f .codegraph/codegraph.db ] && codegraph init -i . 2>&1 | tail -2 || true"
+  #     Detects JS/TS, Python, Go, Rust, Ruby, Java via common signal files.
+  #     Skips silently if no project signal file present or db already exists — zero overhead.
+  AUTOINIT_CMD="[ ! -f .codegraph/codegraph.db ] && { [ -f package.json ] || [ -f pyproject.toml ] || [ -f go.mod ] || [ -f Cargo.toml ] || [ -f Gemfile ] || [ -f pom.xml ] || [ -f setup.py ]; } && codegraph init -i . 2>&1 | tail -2 || true"
   if command -v jq &>/dev/null && [ -f "$SETTINGS" ]; then
     if jq -e --arg cmd "$AUTOINIT_CMD" \
       '.hooks.SessionStart // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
@@ -570,7 +570,8 @@ else
   echo ""
   echo "      Next: run once per project to build the index:"
   echo "        cd /your/project && codegraph init -i"
-  echo "      (or open any project with package.json — SessionStart hook auto-inits it)"
+  echo "      (or open any project with a recognized signal file — SessionStart hook auto-inits"
+  echo "       for: package.json, pyproject.toml, go.mod, Cargo.toml, Gemfile, pom.xml, setup.py)"
 fi
 
 # ---------- 8. Context7 MCP (opt-in) ----------
