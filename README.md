@@ -236,9 +236,21 @@ skills/
 hooks/
     ├── lint-on-edit.sh          # PostToolUse → run linter after every edit
     ├── check-cross-project.py   # SessionStart (async) → flag memory slugs in ≥2 projects
+    ├── check-memory-size.py     # SessionStart (async) → warn when project memory ≥ 30 entries
+    ├── _checkpoint_lib.py       # Shared scan/render — imported by post-compact + inject-checkpoint
     ├── post-compact.py          # PostCompact → systemMessage + write sentinel
-    └── inject-checkpoint.py     # UserPromptSubmit → inject checkpoint as additionalContext (once per compaction)
+    ├── inject-checkpoint.py     # UserPromptSubmit → inject checkpoint as additionalContext (once per compaction)
+    ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
+    ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
+    ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
+    └── rtk-rewrite.sh           # PreToolUse → rewrite shell commands via RTK for token savings
+.secrets-template/
+    └── tg.env.example           # Copy to ~/.claude/.secrets/tg.env (chmod 600) — never commit real values
 ```
+
+> **Secrets convention** — credentials never live inside committable scripts. Hooks that need
+> a token source `~/.claude/.secrets/<name>.env` (chmod 600, gitignored). The repo ships only
+> `.env.example` templates; loaders no-op silently when the secrets file is absent.
 
 ---
 
@@ -281,6 +293,8 @@ And it gets smarter session after session without manual editing.
 **Phase checkpoint > "remember context"** — large tasks save an artifact at every phase boundary. The `post-compact.py` hook surfaces any in-progress checkpoint as a systemMessage after compaction. Phase 0 then loads it and asks whether to resume or start fresh.
 
 **Cross-project auto-flag** — `check-cross-project.py` runs at SessionStart (async, zero latency) and scans all project memories for `name:` slugs appearing in ≥ 2 projects. Pre-populates `/distill-memory` promotion candidates so no repeated lesson slips through.
+
+**Memory-cap guardrail** — `check-memory-size.py` runs at SessionStart (async) and emits a `systemMessage` warning when the current project's memory crosses **30 entries** (critical at **45**). `MEMORY.md` truncates after 200 lines, so silently oversized memory degrades Phase 0 echoes — this catches it before quality drops.
 
 ---
 
