@@ -226,7 +226,8 @@ Always scan both single + double quotes; if other sites are found → fix all or
 | Single-browser Chromium: console / network / state inspect | `chrome-devtools` | More tools: lighthouse, perf trace, memory snapshot, uid interaction |
 | Bug reproduced only in Firefox | `playwright-firefox` | Real Firefox engine — emulation cannot substitute |
 | Bug reproduced only in Safari / WebKit | `playwright-webkit` | Real WebKit engine |
-| Multi-tab scenario | `playwright-*` + `browser_tabs` | chrome-devtools has limited tab isolation |
+| Multi-tab (same user, same session) | `playwright-*` + `browser_tabs` | Tab management within same context — cookies/storage shared across tabs |
+| Multi-session isolation (different users / cookies) | Separate Claude CLI terminals | Each terminal = isolated context (`--isolated`); do NOT use browser_tabs for session isolation |
 | Dropdown / select interaction | `playwright-*` + `browser_select_option` | chrome-devtools has no native select tool |
 | Navigate back in flow | `playwright-*` + `browser_navigate_back` | chrome-devtools cannot go back in history |
 | Drag-and-drop complete flow | `playwright-*` + `browser_drop` | chrome-devtools drag only, no drop target |
@@ -251,7 +252,8 @@ Always scan both single + double quotes; if other sites are found → fix all or
 |---|---|
 | "Layout broken in Safari" | `playwright-webkit` → `browser_navigate` → `browser_take_screenshot` → compare with Chromium screenshot |
 | "Dropdown doesn't work in Firefox" | `playwright-firefox` → `browser_navigate` → `browser_select_option` → `browser_console_messages` |
-| "Multi-tab session mismatch" | 2x `playwright-chromium` → `browser_tabs` → set state in tab 1 → check tab 2 via `browser_evaluate` |
+| "Multi-tab session mismatch (same user)" | `playwright-chromium` → `browser_tabs` → set state in tab 1 → check tab 2 via `browser_evaluate` |
+| "Multi-session mismatch (different users)" | 2 separate Claude CLI terminals → each with own isolated context (`--isolated`) → reproduce in parallel |
 | "Back button breaks state" | `playwright-*` → navigate flow → `browser_navigate_back` → `browser_evaluate` compare state |
 | "Form submit fails only in Firefox" | `playwright-firefox` → fill form → `browser_select_option` on selects → submit → `browser_console_messages` |
 

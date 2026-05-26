@@ -291,9 +291,9 @@ User runs `/distill-memory` (manual) to review + promote — Claude does NOT pro
 
 ---
 
-# Chrome DevTools MCP integration — runtime observation layer
+# Browser MCP integration — runtime observation layer
 
-> **MCP `chrome-devtools` is Claude's "eyes + hands" in the browser** — transforms skills from "writing code blind" → "observe runtime + verify for real" for tasks touching UI / runtime behavior
+> **Default browser MCP is `playwright-chromium`** — use for all navigation, click, screenshot, console, network, and evaluate tasks. Reserve `chrome-devtools` **only** for Lighthouse scores, performance traces, and memory heap snapshots (tools unavailable in Playwright).
 >
 > This section is mandatory for **both built-in skills (verify / run / security-review) that can't be edited directly** + **custom skills (debug / ux / audit / fe)** that have their own integration section
 
@@ -301,36 +301,31 @@ User runs `/distill-memory` (manual) to review + promote — Claude does NOT pro
 
 | Trigger | Skill | Primary tool |
 |---|---|---|
-| User requests verify / before declaring done when UI was touched | `verify` / all skills | `navigate_page` → `click` → `take_snapshot` → `list_console_messages` |
-| Error stack / runtime crash / X broken / X not working | `debug` | reproduce → `list_console_messages` + `list_network_requests` + `evaluate_script` |
-| User requests to open app / "show me it running" | `run` | `new_page` → `navigate_page` → `take_screenshot` |
-| After finishing a style batch / before claiming ux done | `ux` | `take_screenshot` + `resize_page` + `emulate` + (optional) `lighthouse_audit` |
-| User requests perf / a11y audit | `audit` | `lighthouse_audit` + `performance_start_trace`/`stop`/`analyze_insight` + `take_memory_snapshot` |
-| Reviewing code that touches auth / cookie / CSP / CORS | `security-review` | `list_network_requests` (header) + `evaluate_script` (cookie/CSP) + `get_console_message` |
-| Verifying reactivity / hydration / memory leak | `fe` (opt-in) | `evaluate_script` + `list_console_messages` + `take_memory_snapshot` |
-| Cross-browser bug / visual diff / a11y engine difference | `debug` / `ux` / `audit` | Playwright MCP — `playwright-firefox` / `playwright-webkit` + `browser_navigate` + `browser_take_screenshot` |
-| Form interaction: dropdown / back button / drag-drop | `debug` | Playwright MCP — `browser_select_option` / `browser_navigate_back` / `browser_drop` |
+| User requests verify / before declaring done when UI was touched | `verify` / all skills | playwright-chromium — `browser_navigate` → `browser_click` → `browser_snapshot` → `browser_console_messages` |
+| Error stack / runtime crash / X broken / X not working | `debug` | playwright-chromium — `browser_navigate` → `browser_console_messages` + `browser_network_requests` + `browser_evaluate` |
+| User requests to open app / "show me it running" | `run` | playwright-chromium — `browser_navigate` → `browser_take_screenshot` |
+| After finishing a style batch / before claiming ux done | `ux` | playwright-chromium — `browser_take_screenshot` + `browser_resize`; chrome-devtools for `lighthouse_audit` only |
+| User requests perf / a11y audit | `audit` | chrome-devtools only — `lighthouse_audit` + `performance_start_trace`/`stop`/`analyze_insight` + `take_memory_snapshot` |
+| Reviewing code that touches auth / cookie / CSP / CORS | `security-review` | playwright-chromium — `browser_network_requests` + `browser_evaluate` + `browser_console_messages` |
+| Verifying reactivity / hydration / memory leak | `fe` (opt-in) | playwright-chromium — `browser_evaluate` + `browser_console_messages`; chrome-devtools for memory heap only |
+| Cross-browser bug / visual diff / a11y engine difference | `debug` / `ux` / `audit` | `playwright-firefox` / `playwright-webkit` — `browser_navigate` + `browser_take_screenshot` |
+| Form interaction: dropdown / back button / drag-drop | `debug` | playwright-chromium — `browser_select_option` / `browser_navigate_back` / `browser_drop` |
 
 **Do not open browser when:** spec/requirement (`sa` mode A), static codemod (`migrate`), backend-only logic, config/docs, typo, simplify, init
 
-## Chrome-devtools vs Playwright — decision rule
+## Browser MCP decision rule
 
 | Need | MCP to use | Reason |
 |---|---|---|
-| Console errors / network / runtime state (JS) | `chrome-devtools` | Richer inspection: lighthouse, perf trace, memory, uid interaction |
 | Lighthouse score (perf / a11y / best-practice) | `chrome-devtools` only | Playwright has no lighthouse |
 | Performance trace (Web Vitals / long tasks) | `chrome-devtools` only | `performance_start_trace` not in Playwright |
 | Memory heap snapshot | `chrome-devtools` only | `take_memory_snapshot` not in Playwright |
-| A11y tree + uid for element interaction | `chrome-devtools` | `take_snapshot` |
-| Device emulation (iPhone / iPad exact model) | `chrome-devtools` | `emulate` tool |
 | Cross-browser engine test (Firefox / WebKit/Safari) | `playwright-firefox` / `playwright-webkit` | Real engine — emulation is not equivalent |
-| Multi-tab / session isolation test | `playwright-*` + `browser_tabs` | Context isolation between tabs |
-| Dropdown select interaction | `playwright-*` + `browser_select_option` | chrome-devtools has no equivalent |
-| Browser history navigation (back button) | `playwright-*` + `browser_navigate_back` | chrome-devtools cannot go back in history |
-| Drag-and-drop complete flow | `playwright-*` + `browser_drop` | chrome-devtools drag only, no drop target |
-| Single-browser Chromium inspect (default path) | `chrome-devtools` | More tools available |
+| Multi-tab (same user, same context) | `playwright-chromium` + `browser_tabs` | Tab management within same session |
+| Multi-session isolation (different users / fresh state) | Separate terminal each with own Claude CLI | Each terminal = isolated context (`--isolated`); tabs alone do NOT isolate cookies |
+| Everything else (navigate, click, screenshot, console, network, evaluate, interact) | `playwright-chromium` (default) | Default browser MCP |
 
-**Rule:** chrome-devtools = Chromium inspection + Lighthouse/perf/memory; Playwright = cross-browser engine + interaction gaps that chrome-devtools lacks
+**Rule:** playwright-chromium = default for all browser work; chrome-devtools = Lighthouse / perf trace / memory heap only; playwright-firefox/webkit = cross-browser engine tests
 
 ## Token cost reference (know the price before choosing a tool)
 
