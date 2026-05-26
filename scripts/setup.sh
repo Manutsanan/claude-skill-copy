@@ -357,17 +357,21 @@ else
   fi
 fi
 
-# ---------- 7. Lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit) ----------
+# ---------- 7. Lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit + PreToolUse) ----------
 #
-# Installs 3 hooks that work together to restore pipeline state after context compaction:
+# Installs hooks that restore pipeline state after compaction and log skill activity:
 #   check-cross-project.py  → SessionStart (async)     — scan project memories for slugs in ≥2 projects
+#   check-memory-size.py    → SessionStart (async)     — warn at memory cap + surface recent hook errors
 #   post-compact.py         → PostCompact              — show in-progress checkpoints as systemMessage
 #   inject-checkpoint.py    → UserPromptSubmit         — inject checkpoints as additionalContext (once per compaction)
+#   log-skill-invoke.py     → PreToolUse (Skill)       — append JSONL of skill invocations to ~/.claude/logs/
+#   log-user-prompt.py      → UserPromptSubmit         — append truncated prompt JSONL (200 chars, secrets redacted)
 #
-# All hooks exit silently (no output / no token cost) when there's nothing to report.
+# All hooks exit 0 on internal failure (never block); runtime errors go to ~/.claude/logs/hook-errors.jsonl
+# and are surfaced by check-memory-size.py on the next session start.
 # Hooks are copied (not symlinked) so they work independently of the repo location.
 
-note "Installing lifecycle hooks (cross-project memory + checkpoint restore)"
+note "Installing lifecycle hooks (cross-project memory + checkpoint restore + skill invocation logging)"
 
 CROSS_PROJECT_HOOK_SRC="$REPO/hooks/check-cross-project.py"
 CROSS_PROJECT_HOOK_DST="$HOME_CLAUDE/hooks/check-cross-project.py"
@@ -379,6 +383,10 @@ CHECKPOINT_LIB_SRC="$REPO/hooks/_checkpoint_lib.py"
 CHECKPOINT_LIB_DST="$HOME_CLAUDE/hooks/_checkpoint_lib.py"
 MEM_SIZE_HOOK_SRC="$REPO/hooks/check-memory-size.py"
 MEM_SIZE_HOOK_DST="$HOME_CLAUDE/hooks/check-memory-size.py"
+LOG_SKILL_HOOK_SRC="$REPO/hooks/log-skill-invoke.py"
+LOG_SKILL_HOOK_DST="$HOME_CLAUDE/hooks/log-skill-invoke.py"
+LOG_PROMPT_HOOK_SRC="$REPO/hooks/log-user-prompt.py"
+LOG_PROMPT_HOOK_DST="$HOME_CLAUDE/hooks/log-user-prompt.py"
 
 if ! command -v python3 &>/dev/null; then
   warn "python3 not found — skipping lifecycle hooks (skills still work without them)"
@@ -400,7 +408,9 @@ else
     "$CHECKPOINT_LIB_SRC:$CHECKPOINT_LIB_DST" \
     "$POST_COMPACT_HOOK_SRC:$POST_COMPACT_HOOK_DST" \
     "$INJECT_HOOK_SRC:$INJECT_HOOK_DST" \
-    "$MEM_SIZE_HOOK_SRC:$MEM_SIZE_HOOK_DST"; do
+    "$MEM_SIZE_HOOK_SRC:$MEM_SIZE_HOOK_DST" \
+    "$LOG_SKILL_HOOK_SRC:$LOG_SKILL_HOOK_DST" \
+    "$LOG_PROMPT_HOOK_SRC:$LOG_PROMPT_HOOK_DST"; do
     SRC="${PAIR%%:*}"
     DST="${PAIR##*:}"
     FNAME="$(basename "$DST")"
@@ -483,6 +493,40 @@ else
       .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd}]}]
     ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
     ok "Registered UserPromptSubmit hook (inject-checkpoint.py)"
+  fi
+
+  # Register PreToolUse hook — log-skill-invoke.py (matcher=Skill, logs to ~/.claude/logs/)
+  LOG_SKILL_CMD="python3 $LOG_SKILL_HOOK_DST"
+  if jq -e --arg cmd "$LOG_SKILL_CMD" \
+    '.hooks.PreToolUse // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "PreToolUse hook (log-skill-invoke.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$LOG_SKILL_CMD" '
+      .hooks //= {} |
+      .hooks.PreToolUse //= [] |
+      .hooks.PreToolUse += [{"matcher": "Skill", "hooks": [{"type": "command", "command": $cmd}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered PreToolUse hook (log-skill-invoke.py, matcher=Skill)"
+  fi
+
+  # Register UserPromptSubmit hook — log-user-prompt.py (truncates prompts, logs to ~/.claude/logs/)
+  LOG_PROMPT_CMD="python3 $LOG_PROMPT_HOOK_DST"
+  if jq -e --arg cmd "$LOG_PROMPT_CMD" \
+    '.hooks.UserPromptSubmit // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "UserPromptSubmit hook (log-user-prompt.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$LOG_PROMPT_CMD" '
+      .hooks //= {} |
+      .hooks.UserPromptSubmit //= [] |
+      .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered UserPromptSubmit hook (log-user-prompt.py)"
   fi
 fi
 

@@ -7,3 +7,5 @@ node_modules/
 .secrets/
 .env
 .env.local
+__pycache__/
+*.pyc

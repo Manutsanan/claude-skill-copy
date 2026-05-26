@@ -258,10 +258,12 @@ skills/
 hooks/
     ├── lint-on-edit.sh          # PostToolUse → run linter after every edit
     ├── check-cross-project.py   # SessionStart (async) → flag memory slugs in ≥2 projects
-    ├── check-memory-size.py     # SessionStart (async) → warn when project memory ≥ 30 entries
+    ├── check-memory-size.py     # SessionStart (async) → warn when project memory ≥ 30 entries + surface hook errors (last 24h)
     ├── _checkpoint_lib.py       # Shared scan/render — imported by post-compact + inject-checkpoint
     ├── post-compact.py          # PostCompact → systemMessage + write sentinel
     ├── inject-checkpoint.py     # UserPromptSubmit → inject checkpoint as additionalContext (once per compaction)
+    ├── log-skill-invoke.py      # PreToolUse (matcher=Skill) → append JSONL to ~/.claude/logs/ (errors → hook-errors.jsonl)
+    ├── log-user-prompt.py       # UserPromptSubmit → truncated prompt JSONL (redacts emails/tokens, 200 chars; errors → hook-errors.jsonl)
     ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
     ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
     ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
@@ -274,7 +276,8 @@ scripts/
     ├── list-skills.sh           # Print currently linked skills
     ├── lint-skills.py           # Validate frontmatter + link refs + size budgets (memory body, SKILL.md, CLAUDE.md)
     ├── distill-dry-run.py       # Memory tier scanner — emits markdown digest (read-only)
-    └── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
+    ├── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
+    └── skill-report.py          # Analytics over ~/.claude/logs/ — invokes per skill, top phrases, silent skills
 mcp-guides/
     ├── browser.md               # Browser MCP (playwright-chromium default + chrome-devtools for Lighthouse/perf/memory)
     ├── codegraph.md             # CodeGraph MCP — semantic ripple/call-path/impact
@@ -334,6 +337,43 @@ Auto-promotion is intentionally **not** implemented. "Same slug in 2 projects" i
 
 ---
 
+## 📊 Skill invocation observability
+
+Every `Skill` tool call and every user prompt is appended to `~/.claude/logs/*.jsonl` so you can answer questions like *"which Thai phrase keeps triggering the wrong skill?"* or *"which skill never gets used?"* with data, not gut feel.
+
+### What gets logged
+
+| File | When | Content | Privacy |
+|---|---|---|---|
+| `skill-invocations-YYYY-MM.jsonl` | PreToolUse (matcher=Skill) | ts, session prefix, cwd hash, skill, args (120 chars) | cwd hashed |
+| `prompts-YYYY-MM.jsonl` | UserPromptSubmit | ts, session prefix, cwd hash, prompt (200 chars), length | emails/tokens redacted, slash-only prompts skipped |
+| `hook-errors.jsonl` | hook runtime error | ts, hook name, error class, last 2KB of traceback | no payload data |
+
+Files rotate monthly. Nothing ever leaves the machine — logs are not synced to the repo or any external service.
+
+### Query
+
+```bash
+python3 ~/.claude/scripts/skill-report.py                # overview, last 30 days
+python3 ~/.claude/scripts/skill-report.py --days 7
+python3 ~/.claude/scripts/skill-report.py --skill sa     # top phrases that triggered sa
+python3 ~/.claude/scripts/skill-report.py --silent       # skills with zero invokes
+python3 ~/.claude/scripts/skill-report.py --errors       # recent hook errors + traceback
+```
+
+### Hook errors are surfaced, not silent
+
+The logging hooks exit 0 on failure (so they never block your workflow), but the error trace is written to `hook-errors.jsonl`. The existing `check-memory-size.py` SessionStart hook scans the last 24h of errors and adds them to its `systemMessage` warning. If a hook silently broke between sessions, you'll see it on the next session start — not weeks later.
+
+### Honest limits
+
+- **Override detection** (user says "wrong skill, should be Y") isn't implemented yet — phase 2
+- **Prompt→invoke correlation** uses a 10-second window in the same session; noisy on multi-turn tasks
+- **First weeks are sparse** — meaningful signal after ~50+ invocations per skill
+- **No realtime alerts** — hook errors surface on *next* SessionStart, not mid-session
+
+---
+
 ## 🩺 Troubleshooting
 
 **Skill not triggering**
@@ -357,6 +397,14 @@ ls .codegraph/codegraph.db   # if missing → codegraph init -i
 
 **`rtk: command not found`**
 → Install [RTK](https://github.com/skarekrow/rtk) or skip it — skills work without RTK, just with higher token usage.
+
+**Logging hooks misbehaving**
+```bash
+python3 ~/.claude/scripts/skill-report.py --errors --days 7   # recent traces
+tail -f ~/.claude/logs/hook-errors.jsonl                       # watch live
+ls ~/.claude/logs/                                             # files write-perms OK?
+```
+If `hook-errors.jsonl` is missing entirely after a known-bad payload, the hook itself isn't being invoked — check `~/.claude/settings.json` for the `Skill` matcher under `PreToolUse` and `log-user-prompt.py` under `UserPromptSubmit`.
 
 ---
 
