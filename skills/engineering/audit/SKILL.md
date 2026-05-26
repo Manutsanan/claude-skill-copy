@@ -165,6 +165,20 @@ State in report which stack the audit ran on — can't detect → ask user
 | Bundle saving opportunity | `lighthouse_audit category=performance` | 3-10k | Confirm "lodash heavy" with Coverage tab |
 | Memory leak | `take_memory_snapshot` × 2 | 4-10k | Suspected leak from code pattern |
 | CSP / security header | `list_network_requests` | 500-5k | Dimension 4 supply chain audit |
+| Cross-browser a11y behavior (ARIA / keyboard nav) | `playwright-firefox` + `playwright-webkit` | 1-3k/browser | Engine-specific ARIA differences beyond Lighthouse |
+
+### Cross-browser a11y recipe (Playwright)
+
+> Use when: user requests cross-browser a11y audit OR when ARIA behavior / keyboard navigation may differ between Chromium (Lighthouse) and real Firefox / Safari engines
+
+```
+1. Run chrome-devtools lighthouse_audit category=accessibility — Chromium baseline score
+2. playwright-firefox: browser_navigate <url> → browser_press_key "Tab" (5x) → browser_take_screenshot → verify focus ring visible
+3. playwright-firefox: browser_evaluate "() => document.activeElement.tagName" — verify Tab order / focus management
+4. playwright-webkit: same Tab flow → browser_take_screenshot → compare focus ring vs Firefox
+5. playwright-webkit: browser_evaluate "() => document.querySelectorAll('[role]').length" — verify ARIA roles loaded
+6. Flag: missing focus ring in any engine / broken Tab order / ARIA not announced in Firefox or WebKit
+```
 
 ### Anti-patterns (MCP-specific for audit — avoid)
 

@@ -356,6 +356,7 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 | Verify composable side-effect / cleanup | Does `onScopeDispose` fire? → need to perform action + check |
 | Suspected memory leak (modal open/close repeat) | Need `take_memory_snapshot` to compare heap |
 | UI changed → before claiming done | Golden path verify (replaces "ask user to try") |
+| Cross-browser hydration / reactivity difference | Need real Firefox / WebKit engine — use Playwright MCP instead |
 
 **Do not use MCP for:** writing schema, type, composable design pattern, valibot validation — verify with tests, it's faster
 
@@ -392,6 +393,16 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 2. list_console_messages — clean
 3. list_network_requests — no unintended 4xx/5xx
 4. take_screenshot — proof
+```
+
+**E. Cross-browser verify (Playwright — when chrome-devtools passes but user reports Firefox / Safari issue):**
+```
+1. playwright-firefox / playwright-webkit: browser_navigate <url>
+2. browser_wait_for <element>
+3. browser_console_messages — look for hydration errors specific to that engine
+4. browser_evaluate "() => JSON.stringify(<reactive state>)" — compare with Chromium value
+5. browser_take_screenshot — visual proof of difference
+Note: use chrome-devtools for memory / perf trace; Playwright is for engine-specific behavior only
 ```
 
 ### Tool selection (lean — fe does not care about visual)

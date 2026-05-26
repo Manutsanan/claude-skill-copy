@@ -14,15 +14,17 @@ set -euo pipefail
 #   7. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
 #   8. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
 #   9. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
-#  10. Print next steps + missing-dependency warnings
+#  10. (opt-in) Install Playwright MCP — cross-browser testing (Chromium + Firefox + WebKit)
+#  11. Print next steps + missing-dependency warnings
 #
 # Flags:
-#   --force           Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
-#   --skip-link       Skip symlink step (if you already linked manually)
-#   --skip-mcp        Skip chrome-devtools MCP install (if you don't want browser automation)
-#   --skip-deps       Skip auto-install of system dependencies (rg, etc.)
-#   --with-codegraph  Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
-#   --with-context7   Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
+#   --force            Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
+#   --skip-link        Skip symlink step (if you already linked manually)
+#   --skip-mcp         Skip chrome-devtools MCP install (if you don't want browser automation)
+#   --skip-deps        Skip auto-install of system dependencies (rg, etc.)
+#   --with-codegraph   Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
+#   --with-context7    Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
+#   --with-playwright  Register Playwright MCP (chromium + firefox + webkit) in ~/.claude.json (opt-in)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -33,6 +35,7 @@ SKIP_MCP=0
 SKIP_DEPS=0
 WITH_CODEGRAPH=0
 WITH_CONTEXT7=0
+WITH_PLAYWRIGHT=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
@@ -41,8 +44,9 @@ for arg in "$@"; do
     --skip-deps) SKIP_DEPS=1 ;;
     --with-codegraph) WITH_CODEGRAPH=1 ;;
     --with-context7) WITH_CONTEXT7=1 ;;
+    --with-playwright) WITH_PLAYWRIGHT=1 ;;
     -h|--help)
-      sed -n '3,24p' "$0"
+      sed -n '3,26p' "$0"
       exit 0
       ;;
     *)
@@ -486,6 +490,63 @@ else
   fi
 fi
 
+# ---------- 9. Playwright MCP (opt-in) ----------
+#
+# Adds real cross-browser testing to debug/ux/audit/fe skills:
+#   debug  — reproduce bugs in Firefox/WebKit engine; browser_select_option for form bugs
+#   ux     — cross-browser visual screenshot comparison (Chromium vs Firefox vs WebKit)
+#   audit  — cross-browser a11y: ARIA + keyboard nav differences per engine
+#   fe     — cross-browser hydration/reactivity verify (when chrome-devtools passes but issue is engine-specific)
+#
+# Registers 3 separate MCP entries in ~/.claude.json — one per engine:
+#   playwright-chromium, playwright-firefox, playwright-webkit
+#
+# Requires: Node.js + npx (already checked in step 0)
+# Each engine is independent — can use one, two, or all three
+
+if [ "$WITH_PLAYWRIGHT" -eq 0 ]; then
+  note "Playwright MCP skipped (add --with-playwright to install)"
+else
+  note "Installing Playwright MCP (cross-browser: chromium + firefox + webkit)"
+
+  CLAUDE_JSON="$HOME/.claude.json"
+
+  if [ ! -f "$CLAUDE_JSON" ]; then
+    warn "~/.claude.json not found — add manually under mcpServers:"
+    echo '      "playwright-chromium": {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}'
+    echo '      "playwright-firefox":  {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","firefox"]}'
+    echo '      "playwright-webkit":   {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","webkit"]}'
+  elif ! command -v jq &>/dev/null; then
+    warn "jq not found — add manually to ~/.claude.json under mcpServers"
+  elif ! command -v npx &>/dev/null; then
+    warn "npx not found (need Node.js) — install Node then re-run with --with-playwright"
+  else
+    cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+
+    for BROWSER in chromium firefox webkit; do
+      KEY="playwright-$BROWSER"
+      if jq -e ".mcpServers[\"$KEY\"]" "$CLAUDE_JSON" >/dev/null 2>&1; then
+        ok "$KEY MCP already registered in ~/.claude.json"
+      else
+        jq --arg key "$KEY" --arg browser "$BROWSER" '
+          .mcpServers //= {} |
+          .mcpServers[$key] = {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["@playwright/mcp@latest", "--browser", $browser]
+          }
+        ' "$CLAUDE_JSON" > "$tmp" && mv "$tmp" "$CLAUDE_JSON"
+        ok "$KEY registered in ~/.claude.json"
+      fi
+    done
+
+    echo "      Restart Claude Code to pick up the 3 new Playwright MCP servers"
+    echo "      Each engine runs independently — use playwright-firefox / playwright-webkit for cross-browser bugs"
+    echo "      Playwright will download required browser binaries on first run via npx"
+  fi
+fi
+
 # ---------- Summary ----------
 
 note "Done"
@@ -507,10 +568,15 @@ Next steps:
        ./scripts/setup.sh --with-context7
      Queries real docs for Nuxt UI / Valibot / Pinia instead of using training data.
 
-  5. Memory starts empty — that's expected. Lessons accumulate as you work.
+  5. (Optional) Install Playwright MCP for cross-browser testing:
+       ./scripts/setup.sh --with-playwright
+     Registers playwright-chromium, playwright-firefox, playwright-webkit in ~/.claude.json
+     Enables: cross-browser reproduce in debug, visual diff in ux, a11y verify in audit.
+
+  6. Memory starts empty — that's expected. Lessons accumulate as you work.
      Read CLAUDE.md sections "Save triggers" + "Graduation pipeline" for how it grows.
 
-  5. Customize for your project: add a CLAUDE.md inside your project root with
+  7. Customize for your project: add a CLAUDE.md inside your project root with
      stack info, conventions, and project-specific rules.
 
 Files touched:

@@ -90,7 +90,9 @@ Read the stack **bottom-up** to find the **caller from our code** (skip library 
 
 ### Step 3 — Reproduce locally
 
-- **Frontend (prefer chrome-devtools MCP):** dev server up → `navigate_page` → reproduce trigger → `list_console_messages` + `list_network_requests` + `evaluate_script` (inspect state at fail point) — see **Chrome DevTools playbook** below
+- **Frontend (single-browser Chromium — chrome-devtools MCP):** dev server up → `navigate_page` → reproduce trigger → `list_console_messages` + `list_network_requests` + `evaluate_script` (inspect state at fail point) — see **Chrome DevTools playbook** below
+- **Frontend (cross-browser bug — Playwright MCP):** bug reported only in Firefox/Safari → use `playwright-firefox` / `playwright-webkit` to reproduce in the affected engine — see **Playwright MCP playbook** below
+- **Interaction gap (chrome-devtools can't do):** dropdown select → `browser_select_option`; browser back → `browser_navigate_back`; multi-tab desync → `browser_tabs` — use Playwright MCP
 - **API:** curl with the user's payload
 - **State:** construct the triggering state
 
@@ -208,6 +210,61 @@ Always scan both single + double quotes; if other sites are found → fix all or
 - Ask user to paste screenshot + steps to reproduce + console log
 - State plainly: "debugging from stack + source only — not reproduced in a real browser"
 - Do not declare root cause if not yet reproduced — keep progress tracker Step 3 incomplete
+
+---
+
+## Playwright MCP playbook (cross-browser reproduce)
+
+> Use when: bug is browser-engine-specific ("works in Chrome, broken in Firefox/Safari"), multi-tab desync, or form interactions that chrome-devtools cannot do (select, navigate back, drop)
+>
+> MCP names: `playwright-chromium`, `playwright-firefox`, `playwright-webkit` — each is a separate MCP server; Playwright MCP restarts are required after `.claude.json` is edited
+
+### Chrome-devtools vs Playwright — decision rule
+
+| Need | Use | Why |
+|---|---|---|
+| Single-browser Chromium: console / network / state inspect | `chrome-devtools` | More tools: lighthouse, perf trace, memory snapshot, uid interaction |
+| Bug reproduced only in Firefox | `playwright-firefox` | Real Firefox engine — emulation cannot substitute |
+| Bug reproduced only in Safari / WebKit | `playwright-webkit` | Real WebKit engine |
+| Multi-tab scenario | `playwright-*` + `browser_tabs` | chrome-devtools has limited tab isolation |
+| Dropdown / select interaction | `playwright-*` + `browser_select_option` | chrome-devtools has no native select tool |
+| Navigate back in flow | `playwright-*` + `browser_navigate_back` | chrome-devtools cannot go back in history |
+| Drag-and-drop complete flow | `playwright-*` + `browser_drop` | chrome-devtools drag only, no drop target |
+
+### Cross-browser reproduce flow (standard)
+
+```
+1. Reproduce bug in chrome-devtools first — confirm it is browser-specific (not server/code issue)
+2. Switch to playwright-firefox / playwright-webkit for the affected engine
+3. browser_navigate <same url>
+4. browser_wait_for <selector>
+5. Perform same trigger action (browser_click / browser_fill / browser_select_option)
+6. browser_console_messages              ← compare with Chromium output
+7. browser_network_requests              ← check if different XHR/Fetch behavior
+8. browser_evaluate "() => <state>"      ← inspect runtime state at failure point
+9. browser_take_screenshot               ← visual proof of the difference
+```
+
+### Pattern-specific recipes
+
+| Symptom | Playwright recipe |
+|---|---|
+| "Layout broken in Safari" | `playwright-webkit` → `browser_navigate` → `browser_take_screenshot` → compare with Chromium screenshot |
+| "Dropdown doesn't work in Firefox" | `playwright-firefox` → `browser_navigate` → `browser_select_option` → `browser_console_messages` |
+| "Multi-tab session mismatch" | 2x `playwright-chromium` → `browser_tabs` → set state in tab 1 → check tab 2 via `browser_evaluate` |
+| "Back button breaks state" | `playwright-*` → navigate flow → `browser_navigate_back` → `browser_evaluate` compare state |
+| "Form submit fails only in Firefox" | `playwright-firefox` → fill form → `browser_select_option` on selects → submit → `browser_console_messages` |
+
+### Anti-patterns (Playwright-specific — avoid)
+
+- **Switching to Playwright for single-browser issues** — chrome-devtools has more tools (lighthouse, perf, memory); use Playwright only when engine-specific behavior is the question
+- **Skipping chrome-devtools reproduce first** — always confirm in Chromium first; if it reproduces in Chromium too, the issue is not browser-specific
+- **Treating Playwright as a replacement for chrome-devtools** — both MCPs serve different roles; they are complementary not alternatives
+
+### Fallback when Playwright MCP is unavailable
+
+- Ask user to test in Firefox / Safari manually + send screenshot + console log
+- State: "cross-browser testing not available — verified in Chromium only"
 
 ---
 

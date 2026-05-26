@@ -123,7 +123,7 @@ SKILL.md rule
 - Claude Code (CLI / desktop / VS Code)
 - `git` + `bash` (macOS / Linux / WSL)
 - **Auto-install:** `ripgrep`, `python3`, `jq`, chrome-devtools MCP
-- **Optional:** [RTK CLI](https://github.com/skarekrow/rtk), [CodeGraph](https://github.com/colbymchenry/codegraph)
+- **Optional:** [RTK CLI](https://github.com/skarekrow/rtk), [CodeGraph](https://github.com/colbymchenry/codegraph), Playwright MCP
 
 ### Bootstrap
 
@@ -144,7 +144,7 @@ cd ~/Project/claude-skill-copy
 | 4 | ติดตั้ง lint hook (PostToolUse) |
 | 5 | Register chrome-devtools MCP |
 
-**Flags:** `--force` · `--skip-link` · `--skip-deps` · `--skip-mcp`
+**Flags:** `--force` · `--skip-link` · `--skip-deps` · `--skip-mcp` · `--with-codegraph` · `--with-context7` · `--with-playwright`
 
 ### Verify
 
@@ -161,10 +161,38 @@ claude mcp list              # เห็น "chrome-devtools"
 | MCP | ทำอะไร | Skill ที่ใช้ |
 |---|---|---|
 | **RTK** | กรอง shell output → ลด token 60-90% | ทุก skill (hook อัตโนมัติ) |
-| **chrome-devtools** | Browser runtime — error / network / state / a11y | `debug` / `ux` / `fe` / `audit` |
+| **chrome-devtools** | Browser runtime — error / network / state / Lighthouse / perf trace / memory | `debug` / `ux` / `fe` / `audit` |
+| **Playwright** | Cross-browser testing — Chromium + Firefox + WebKit (Safari) | `debug` / `ux` / `audit` / `fe` |
 | **CodeGraph** | Semantic codebase graph — callers / impact / trace | ทุก skill ที่ ripple check |
 | **Context7** | Live library docs ตามเวอร์ชัน | `fe` / `debug` / `migrate` / `sa` |
 | **Figma** | Design structure + thumbnail + comments | `ux` / `sa` |
+
+### Chrome-devtools vs Playwright
+
+| ต้องการ | ใช้ MCP |
+|---|---|
+| Console errors / network / runtime state | `chrome-devtools` |
+| Lighthouse score / perf trace / memory heap | `chrome-devtools` เท่านั้น |
+| ทดสอบ Firefox engine | `playwright-firefox` |
+| ทดสอบ Safari / WebKit | `playwright-webkit` |
+| Dropdown select / navigate back / multi-tab | `playwright-*` |
+
+### Playwright (opt-in)
+
+```bash
+./scripts/setup.sh --with-playwright
+```
+
+ติดตั้ง 3 MCP servers ใน `~/.claude.json`:
+- `playwright-chromium` — Chromium engine
+- `playwright-firefox` — Firefox engine
+- `playwright-webkit` — WebKit/Safari engine
+
+**Skills ที่ได้ประโยชน์:**
+- `debug` — reproduce bug ใน Firefox/Safari; `browser_select_option` สำหรับ form bugs
+- `ux` — cross-browser screenshot comparison หลัง chrome-devtools ผ่านแล้ว
+- `audit` — cross-browser a11y: ARIA + keyboard nav ต่างกันระหว่าง engines
+- `fe` — cross-browser hydration verify เมื่อ chrome-devtools pass แต่ user แจ้งว่า Firefox/Safari พัง
 
 ### CodeGraph (แนะนำ)
 
@@ -224,15 +252,15 @@ codegraph init -i
 
 ## 📋 Skills reference
 
-| Skill | What | Browser MCP |
-|---|---|---|
-| [`sa`](skills/engineering/sa/SKILL.md) | System Analyst + Security Audit | — |
-| [`ux`](skills/engineering/ux/SKILL.md) | Visual + interaction design | ✅ |
-| [`fe`](skills/engineering/fe/SKILL.md) | Frontend code (Nuxt/Vue/React/TS) | 🟡 opt-in |
-| [`debug`](skills/engineering/debug/SKILL.md) | Bug diagnosis | ✅ |
-| [`migrate`](skills/engineering/migrate/SKILL.md) | Bulk transformation หลายไฟล์ | — |
-| [`audit`](skills/engineering/audit/SKILL.md) | Project health sweep | ✅ |
-| [`_template`](skills/misc/_template/SKILL.md) | Skeleton สำหรับ skill ใหม่ | — |
+| Skill | What | chrome-devtools | Playwright |
+|---|---|---|---|
+| [`sa`](skills/engineering/sa/SKILL.md) | System Analyst + Security Audit | — | — |
+| [`ux`](skills/engineering/ux/SKILL.md) | Visual + interaction design | ✅ visual / lighthouse | ✅ cross-browser screenshot |
+| [`fe`](skills/engineering/fe/SKILL.md) | Frontend code (Nuxt/Vue/React/TS) | 🟡 opt-in | 🟡 cross-browser hydration |
+| [`debug`](skills/engineering/debug/SKILL.md) | Bug diagnosis | ✅ single-browser | ✅ cross-browser + select/back/tabs |
+| [`migrate`](skills/engineering/migrate/SKILL.md) | Bulk transformation หลายไฟล์ | — | — |
+| [`audit`](skills/engineering/audit/SKILL.md) | Project health sweep | ✅ lighthouse / perf / memory | ✅ cross-browser a11y |
+| [`_template`](skills/misc/_template/SKILL.md) | Skeleton สำหรับ skill ใหม่ | — | — |
 
 แต่ละ skill folder มี: `SKILL.md` · `learnings.md` · `REFERENCE.md` (fe เท่านั้น)
 

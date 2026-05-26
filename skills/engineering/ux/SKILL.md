@@ -42,6 +42,7 @@ UX progress:
 - [ ] Accessibility (a11y) checked (aria-label, contrast, focus ring, reduced-motion)
 - [ ] Handoff checklist ux→fe ticked (if handing off)
 - [ ] Quality gates passed (Vite compile / 375–1440 viewports / no horizontal scroll)
+- [ ] Cross-browser visual verified (Firefox + WebKit) — or explicitly skipped with reason
 ```
 
 ---
@@ -322,6 +323,54 @@ Add results to progress tracker `Responsive plan` with screenshot link or "verif
 - Ask user to send screenshots from every specified breakpoint
 - Ask user to open DevTools → toggle device → send screenshot
 - State plainly: "design verified at code-level only — not tested in browser"
+
+---
+
+## Playwright MCP playbook (cross-browser visual verification)
+
+> Use after chrome-devtools screenshots pass — validate rendering in Firefox engine + WebKit/Safari engine
+> Skip for: color / spacing tweaks that do not involve CSS properties known to differ across engines
+
+### When cross-browser visual check is required (not optional)
+
+- `gap` / `flex` / `grid` / `subgrid` — Firefox and Safari have historically had engine-specific rendering differences
+- `position: sticky` + `overflow` combinations
+- Custom scroll behavior / `-webkit-overflow-scrolling`
+- Font rendering at small sizes — WebKit anti-aliasing differs from Chromium
+- `backdrop-filter` / `clip-path` — WebKit support and rendering differs
+- `@container` queries — behavior at breakpoint boundaries varies between Firefox, Safari, and Chromium
+
+### Cross-browser visual flow (run after chrome-devtools screenshots pass)
+
+```
+1. playwright-chromium: browser_navigate → browser_take_screenshot (baseline — should match chrome-devtools)
+2. playwright-firefox:  browser_navigate → browser_take_screenshot (compare vs Chromium)
+3. playwright-webkit:   browser_navigate → browser_take_screenshot (compare vs Chromium — WebKit as Safari proxy)
+4. For each breakpoint with layout change: browser_resize <width> → browser_take_screenshot × 3 browsers
+5. Flag any visual diff → identify CSS property causing it → fix
+```
+
+### Decision: chrome-devtools vs Playwright for ux
+
+| Need | Use |
+|---|---|
+| Lighthouse a11y score | `chrome-devtools` — Playwright has no lighthouse |
+| Performance trace (Web Vitals) | `chrome-devtools` — Playwright has no perf trace |
+| Device emulation (iPhone / iPad exact model) | `chrome-devtools` — `emulate` tool |
+| Interactive a11y tree (uid + hover / focus state) | `chrome-devtools` — `take_snapshot` |
+| Cross-browser engine rendering diff | `playwright-firefox` + `playwright-webkit` |
+| Responsive at multiple breakpoints per engine | Playwright — `browser_resize` × 3 browsers |
+
+### Anti-patterns (Playwright for ux)
+
+- **Running cross-browser check before chrome-devtools passes** — fix Chromium rendering first, then cross-browser
+- **Cross-browser check for every task** — only for CSS properties listed above; color / spacing / font-size tweaks do not need it
+- **Treating WebKit screenshot as exact Safari** — WebKit MCP is a proxy; close but not 100% identical to Safari on iOS
+
+### Fallback when Playwright MCP is unavailable
+
+- State: "cross-browser verified in Chromium only via chrome-devtools"
+- Ask user to test in Safari / Firefox + send screenshots if CSS properties listed above were touched
 
 ---
 

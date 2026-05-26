@@ -308,8 +308,29 @@ User runs `/distill-memory` (manual) to review + promote — Claude does NOT pro
 | User requests perf / a11y audit | `audit` | `lighthouse_audit` + `performance_start_trace`/`stop`/`analyze_insight` + `take_memory_snapshot` |
 | Reviewing code that touches auth / cookie / CSP / CORS | `security-review` | `list_network_requests` (header) + `evaluate_script` (cookie/CSP) + `get_console_message` |
 | Verifying reactivity / hydration / memory leak | `fe` (opt-in) | `evaluate_script` + `list_console_messages` + `take_memory_snapshot` |
+| Cross-browser bug / visual diff / a11y engine difference | `debug` / `ux` / `audit` | Playwright MCP — `playwright-firefox` / `playwright-webkit` + `browser_navigate` + `browser_take_screenshot` |
+| Form interaction: dropdown / back button / drag-drop | `debug` | Playwright MCP — `browser_select_option` / `browser_navigate_back` / `browser_drop` |
 
 **Do not open browser when:** spec/requirement (`sa` mode A), static codemod (`migrate`), backend-only logic, config/docs, typo, simplify, init
+
+## Chrome-devtools vs Playwright — decision rule
+
+| Need | MCP to use | Reason |
+|---|---|---|
+| Console errors / network / runtime state (JS) | `chrome-devtools` | Richer inspection: lighthouse, perf trace, memory, uid interaction |
+| Lighthouse score (perf / a11y / best-practice) | `chrome-devtools` only | Playwright has no lighthouse |
+| Performance trace (Web Vitals / long tasks) | `chrome-devtools` only | `performance_start_trace` not in Playwright |
+| Memory heap snapshot | `chrome-devtools` only | `take_memory_snapshot` not in Playwright |
+| A11y tree + uid for element interaction | `chrome-devtools` | `take_snapshot` |
+| Device emulation (iPhone / iPad exact model) | `chrome-devtools` | `emulate` tool |
+| Cross-browser engine test (Firefox / WebKit/Safari) | `playwright-firefox` / `playwright-webkit` | Real engine — emulation is not equivalent |
+| Multi-tab / session isolation test | `playwright-*` + `browser_tabs` | Context isolation between tabs |
+| Dropdown select interaction | `playwright-*` + `browser_select_option` | chrome-devtools has no equivalent |
+| Browser history navigation (back button) | `playwright-*` + `browser_navigate_back` | chrome-devtools cannot go back in history |
+| Drag-and-drop complete flow | `playwright-*` + `browser_drop` | chrome-devtools drag only, no drop target |
+| Single-browser Chromium inspect (default path) | `chrome-devtools` | More tools available |
+
+**Rule:** chrome-devtools = Chromium inspection + Lighthouse/perf/memory; Playwright = cross-browser engine + interaction gaps that chrome-devtools lacks
 
 ## Token cost reference (know the price before choosing a tool)
 
@@ -437,11 +458,11 @@ If MCP `chrome-devtools` is offline / dev server isn't running / user disabled M
 
 ## Skill integration reference
 
-Custom skills with their own chrome-devtools section (read each skill's SKILL.md for specifics):
-- `debug/SKILL.md` — reproduce + inspect runtime state instead of guessing from stack
-- `ux/SKILL.md` — visual verification + responsive + a11y after a style batch
-- `audit/SKILL.md` — lighthouse + perf trace + memory snapshot
-- `fe/SKILL.md` — opt-in for reactivity/hydration verification
+Custom skills with their own chrome-devtools + Playwright sections (read each skill's SKILL.md for specifics):
+- `debug/SKILL.md` — chrome-devtools: reproduce + inspect runtime state; Playwright: cross-browser reproduce + select/back/tabs
+- `ux/SKILL.md` — chrome-devtools: visual + lighthouse + responsive; Playwright: cross-browser engine screenshot comparison
+- `audit/SKILL.md` — chrome-devtools: lighthouse + perf trace + memory; Playwright: cross-browser a11y behavior (ARIA / keyboard nav)
+- `fe/SKILL.md` — chrome-devtools: reactivity/hydration inspect; Playwright: cross-browser hydration verify
 
 Built-in skills (verify / run / security-review) — use the trigger map + token discipline above as the guide, since these skills can't be edited directly
 
