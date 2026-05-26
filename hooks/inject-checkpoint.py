@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-PostCompact hook: after context compaction, scan for in-progress phase checkpoints.
-Shows them as systemMessage (visible in UI immediately) and writes a sentinel file
-so inject-checkpoint.py (UserPromptSubmit hook) can inject them as additionalContext
-on the user's next message — the only way to reach Claude's context post-compaction.
+UserPromptSubmit hook: after context compaction, inject in-progress phase
+checkpoints as additionalContext so Claude's Phase 0 can resume the pipeline.
+Fires only once per compaction (sentinel file guards repeated injection).
+post-compact.py writes the sentinel; this hook reads + deletes it.
 """
 import json, sys, os, re
 from pathlib import Path
@@ -13,6 +13,15 @@ def main():
     cwd = os.getcwd()
     project_id = cwd.replace("/", "-")
     checkpoint_dir = Path.home() / ".claude" / "projects" / project_id / "memory"
+    sentinel = checkpoint_dir / ".pending-checkpoint-inject"
+
+    if not sentinel.exists():
+        return
+
+    try:
+        sentinel.unlink()
+    except Exception:
+        pass
 
     if not checkpoint_dir.exists():
         return
@@ -38,17 +47,12 @@ def main():
         lines.append("")
 
     output = {
-        "systemMessage": "\n".join(lines),
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": "\n".join(lines),
+        }
     }
     print(json.dumps(output))
-
-    # Write sentinel so inject-checkpoint.py injects checkpoint as additionalContext
-    # on the user's next message (UserPromptSubmit supports additionalContext; PostCompact does not).
-    sentinel = checkpoint_dir / ".pending-checkpoint-inject"
-    try:
-        sentinel.touch()
-    except Exception:
-        pass
 
 
 try:

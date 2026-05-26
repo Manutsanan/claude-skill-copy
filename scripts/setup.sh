@@ -11,12 +11,13 @@ set -euo pipefail
 #   4. Install ~/.claude/RTK.md from RTK.template.md (if missing or with --force)
 #   5. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
 #   6. Install lint tooling (PostToolUse hook + Python venv)
-#   7. Install playwright-chromium MCP (user scope) — default browser MCP for all skills
-#   8. (opt-in) Install playwright-firefox + playwright-webkit — cross-browser engine testing
-#   9. (opt-in) Install chrome-devtools MCP — Lighthouse / perf trace / memory heap only
-#  10. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
-#  11. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
-#  11. Print next steps + missing-dependency warnings
+#   7. Install lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit)
+#   8. Install playwright-chromium MCP (user scope) — default browser MCP for all skills
+#   9. (opt-in) Install playwright-firefox + playwright-webkit — cross-browser engine testing
+#  10. (opt-in) Install chrome-devtools MCP — Lighthouse / perf trace / memory heap only
+#  11. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
+#  12. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
+#  13. Print next steps + missing-dependency warnings
 #
 # Flags:
 #   --force            Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
@@ -333,6 +334,110 @@ else
   fi
 fi
 
+# ---------- 7. Lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit) ----------
+#
+# Installs 3 hooks that work together to restore pipeline state after context compaction:
+#   check-cross-project.py  → SessionStart (async)     — scan project memories for slugs in ≥2 projects
+#   post-compact.py         → PostCompact              — show in-progress checkpoints as systemMessage
+#   inject-checkpoint.py    → UserPromptSubmit         — inject checkpoints as additionalContext (once per compaction)
+#
+# All hooks exit silently (no output / no token cost) when there's nothing to report.
+# Hooks are copied (not symlinked) so they work independently of the repo location.
+
+note "Installing lifecycle hooks (cross-project memory + checkpoint restore)"
+
+CROSS_PROJECT_HOOK_SRC="$REPO/hooks/check-cross-project.py"
+CROSS_PROJECT_HOOK_DST="$HOME_CLAUDE/hooks/check-cross-project.py"
+POST_COMPACT_HOOK_SRC="$REPO/hooks/post-compact.py"
+POST_COMPACT_HOOK_DST="$HOME_CLAUDE/hooks/post-compact.py"
+INJECT_HOOK_SRC="$REPO/hooks/inject-checkpoint.py"
+INJECT_HOOK_DST="$HOME_CLAUDE/hooks/inject-checkpoint.py"
+
+if ! command -v python3 &>/dev/null; then
+  warn "python3 not found — skipping lifecycle hooks (skills still work without them)"
+elif ! command -v jq &>/dev/null; then
+  warn "jq not found — skipping lifecycle hook registration (needed for settings.json merge)"
+else
+  mkdir -p "$HOME_CLAUDE/hooks"
+
+  if [ ! -f "$SETTINGS" ]; then
+    echo '{"hooks":{}}' > "$SETTINGS"
+    ok "Created $SETTINGS"
+  fi
+
+  # Copy hook scripts (not symlinked — standalone Python, not skill assets)
+  for PAIR in \
+    "$CROSS_PROJECT_HOOK_SRC:$CROSS_PROJECT_HOOK_DST" \
+    "$POST_COMPACT_HOOK_SRC:$POST_COMPACT_HOOK_DST" \
+    "$INJECT_HOOK_SRC:$INJECT_HOOK_DST"; do
+    SRC="${PAIR%%:*}"
+    DST="${PAIR##*:}"
+    FNAME="$(basename "$DST")"
+    if [ ! -f "$SRC" ]; then
+      warn "$FNAME missing in repo hooks/ — skipping"
+      continue
+    fi
+    if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+      ok "$FNAME already up-to-date"
+    else
+      cp "$SRC" "$DST"
+      chmod +x "$DST"
+      ok "Installed $FNAME"
+    fi
+  done
+
+  # Register SessionStart hook — check-cross-project.py (async, zero latency)
+  CROSS_CMD="python3 $CROSS_PROJECT_HOOK_DST"
+  if jq -e --arg cmd "$CROSS_CMD" \
+    '.hooks.SessionStart // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "SessionStart hook (check-cross-project.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$CROSS_CMD" '
+      .hooks //= {} |
+      .hooks.SessionStart //= [] |
+      .hooks.SessionStart += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered SessionStart hook (check-cross-project.py async)"
+  fi
+
+  # Register PostCompact hook — post-compact.py (shows systemMessage + writes sentinel)
+  COMPACT_CMD="python3 $POST_COMPACT_HOOK_DST"
+  if jq -e --arg cmd "$COMPACT_CMD" \
+    '.hooks.PostCompact // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "PostCompact hook (post-compact.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$COMPACT_CMD" '
+      .hooks //= {} |
+      .hooks.PostCompact //= [] |
+      .hooks.PostCompact += [{"hooks": [{"type": "command", "command": $cmd}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered PostCompact hook (post-compact.py)"
+  fi
+
+  # Register UserPromptSubmit hook — inject-checkpoint.py (fires once per compaction via sentinel)
+  INJECT_CMD="python3 $INJECT_HOOK_DST"
+  if jq -e --arg cmd "$INJECT_CMD" \
+    '.hooks.UserPromptSubmit // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "UserPromptSubmit hook (inject-checkpoint.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$INJECT_CMD" '
+      .hooks //= {} |
+      .hooks.UserPromptSubmit //= [] |
+      .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered UserPromptSubmit hook (inject-checkpoint.py)"
+  fi
+fi
+
 # ---------- 6. playwright-chromium MCP (default browser) ----------
 #
 # Default browser MCP — powers navigate/click/screenshot/console/network/evaluate
@@ -606,16 +711,19 @@ Next steps:
      stack info, conventions, and project-specific rules.
 
 Files touched:
-  $HOME_CLAUDE/skills/                  (symlinks → $REPO/skills/**)
-  $HOME_CLAUDE/CLAUDE.md                (Universal Phase 0)
-  $HOME_CLAUDE/RTK.md                   (optional — RTK CLI ref)
-  $HOME_CLAUDE/memory/                  (empty — your global lessons go here)
-  $HOME_CLAUDE/projects/                (empty — per-project memory goes here)
-  $HOME_CLAUDE/scripts/.venv            (Python venv for lint tooling)
-  $HOME_CLAUDE/scripts/lint-skills.py   (symlink → $REPO/scripts/lint-skills.py)
-  $HOME_CLAUDE/hooks/lint-on-edit.sh    (symlink → $REPO/hooks/lint-on-edit.sh)
-  $HOME_CLAUDE/settings.json            (PostToolUse hook registered)
-  Claude MCP servers                    (chrome-devtools registered at user scope)
+  $HOME_CLAUDE/skills/                       (symlinks → $REPO/skills/**)
+  $HOME_CLAUDE/CLAUDE.md                     (Universal Phase 0)
+  $HOME_CLAUDE/RTK.md                        (optional — RTK CLI ref)
+  $HOME_CLAUDE/memory/                       (empty — your global lessons go here)
+  $HOME_CLAUDE/projects/                     (empty — per-project memory goes here)
+  $HOME_CLAUDE/scripts/.venv                 (Python venv for lint tooling)
+  $HOME_CLAUDE/scripts/lint-skills.py        (symlink → $REPO/scripts/lint-skills.py)
+  $HOME_CLAUDE/hooks/lint-on-edit.sh         (symlink → $REPO/hooks/lint-on-edit.sh)
+  $HOME_CLAUDE/hooks/check-cross-project.py  (copy — SessionStart async hook)
+  $HOME_CLAUDE/hooks/post-compact.py         (copy — PostCompact hook)
+  $HOME_CLAUDE/hooks/inject-checkpoint.py    (copy — UserPromptSubmit hook)
+  $HOME_CLAUDE/settings.json                 (PostToolUse + SessionStart + PostCompact + UserPromptSubmit hooks registered)
+  Claude MCP servers                         (chrome-devtools registered at user scope)
 
 Verify chrome-devtools MCP:
   claude mcp list                       # should show "chrome-devtools"
