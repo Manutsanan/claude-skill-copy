@@ -90,9 +90,9 @@ Read the stack **bottom-up** to find the **caller from our code** (skip library 
 
 ### Step 3 — Reproduce locally
 
-- **Frontend (single-browser Chromium — chrome-devtools MCP):** dev server up → `navigate_page` → reproduce trigger → `list_console_messages` + `list_network_requests` + `evaluate_script` (inspect state at fail point) — see **Chrome DevTools playbook** below
-- **Frontend (cross-browser bug — Playwright MCP):** bug reported only in Firefox/Safari → use `playwright-firefox` / `playwright-webkit` to reproduce in the affected engine — see **Playwright MCP playbook** below
-- **Interaction gap (chrome-devtools can't do):** dropdown select → `browser_select_option`; browser back → `browser_navigate_back`; multi-tab desync → `browser_tabs` — use Playwright MCP
+- **Frontend (default — playwright-chromium MCP):** dev server up → `browser_navigate` → reproduce trigger → `browser_console_messages` + `browser_network_requests` + `browser_evaluate` (inspect state at fail point) — see **Playwright MCP playbook** below
+- **Frontend (cross-browser bug):** bug reported only in Firefox/Safari → use `playwright-firefox` / `playwright-webkit` to reproduce in the affected engine — see **Playwright MCP playbook** below
+- **Frontend (perf / Lighthouse / memory heap only):** jank / heap leak / slow render → use `chrome-devtools` — `performance_start_trace` / `take_memory_snapshot` — see **Chrome DevTools playbook** below
 - **API:** curl with the user's payload
 - **State:** construct the triggering state
 
@@ -158,52 +158,23 @@ Always scan both single + double quotes; if other sites are found → fix all or
 
 ---
 
-## Chrome DevTools MCP playbook (use instead of guessing from stack)
+## Chrome DevTools MCP playbook (perf trace / memory heap only)
 
-> Enable when MCP `chrome-devtools` is available + bug is frontend / runtime — token discipline in `~/.claude/CLAUDE.md` section "Chrome DevTools MCP integration"
+> Use ONLY for: performance trace (Web Vitals, long tasks), memory heap snapshot — tools unavailable in Playwright. For all other debugging (console, network, state, interactions) use `playwright-chromium` instead.
 
-### Reproduce flow (standard)
-
-```
-1. new_page (if none exists) + navigate_page <localhost url>
-2. wait_for <selector indicating page loaded>     ← prevent flake from async/hydration
-3. perform action that triggers the bug (click / fill / press_key)
-4. list_console_messages                          ← actual errors / warnings
-5. list_network_requests                          ← XHR fail / 4xx / 5xx
-6. evaluate_script "JSON.stringify(<state>)"     ← inspect runtime state at failure point
-7. (optional) take_screenshot                     ← proof for user
-```
-
-### Tool selection guide (choose by goal — token-aware)
+### Tool selection guide (chrome-devtools exclusive tools)
 
 | What you need to know | Tool | Token cost | Notes |
 |---|---|---|---|
-| Error message + warnings shown | `list_console_messages` / `get_console_message` | 500-2k | **Always start here** — cheap + on-point |
-| Network fail / status code | `list_network_requests` → `get_network_request <id>` | 500-5k | Check silently failing XHR/Fetch |
-| Runtime state (Vue/React reactive, computed, store) | `evaluate_script` | 100-2k | Inspect at the exact failure point |
-| Element exists + uid | `take_snapshot` | 5-20k | Use only when interaction is needed |
-| Screenshot of bug | `take_screenshot` | 1-3k | Proof for user, not for debugging |
-| Memory leak / heap growth | `take_memory_snapshot` | 2-5k | Use paired with repeated reproductions |
+| Memory leak / heap growth | `take_memory_snapshot` | 2-5k | Pair with repeated reproductions |
 | Jank / infinite loop / slow render | `performance_start_trace` → `stop` → `analyze_insight` | 5-15k | 3-5 seconds is enough |
 
-### Pattern-specific reproduce recipes
+### Pattern-specific recipes (chrome-devtools exclusive)
 
-| Symptom | MCP recipe |
+| Symptom | chrome-devtools recipe |
 |---|---|
-| Reactivity not updating | `evaluate_script` "inspect ref/computed before and after trigger" → if value unchanged = source not reactive (see `Vue reactivity` table) |
-| Hydration mismatch | `list_console_messages` → find `Hydration ... mismatch` → `evaluate_script` compare SSR vs client output |
-| Infinite loop / page freeze | `performance_start_trace` 3 sec → `analyze_insight` find self-recursing function |
-| 401 cascade / auth loop | `list_network_requests` → check request order → find request that fires before token is ready |
-| Multi-tab desync | open 2 pages → `evaluate_script` set localStorage in tab 1 → check tab 2 via `evaluate_script` to see if synced |
-| Click no response | `take_snapshot` → find button uid → `click uid=X` → `list_console_messages` check handler error |
-
-### Anti-patterns (MCP-specific — avoid)
-
-- **`take_snapshot` on every step** — costs 15-20k tokens each time; use only when uid is needed
-- **`take_screenshot` instead of console check** — image doesn't reveal errors; use `list_console_messages` first
-- **Opening browser without closing** — run `close_page` after session ends to prevent stale state
-- **Snapshot before `wait_for`** — async not finished = reading wrong state
-- **Using `evaluate_script` to run fix logic** — `evaluate_script` is for inspection only, not for patching code
+| Infinite loop / page freeze | `performance_start_trace` 3 sec → `stop` → `analyze_insight` find self-recursing function |
+| Memory leak / heap growth | `take_memory_snapshot` before → reproduce N times → `take_memory_snapshot` after → compare heap |
 
 ### Fallback when MCP is unavailable
 
@@ -213,29 +184,42 @@ Always scan both single + double quotes; if other sites are found → fix all or
 
 ---
 
-## Playwright MCP playbook (cross-browser reproduce)
+## Playwright MCP playbook (default browser MCP for all debugging)
 
-> Use when: bug is browser-engine-specific ("works in Chrome, broken in Firefox/Safari"), multi-tab desync, or form interactions that chrome-devtools cannot do (select, navigate back, drop)
+> Default MCP for ALL frontend debugging. Use `playwright-chromium` for single-browser Chromium. Use `playwright-firefox` / `playwright-webkit` for cross-browser engine-specific bugs.
 >
 > MCP names: `playwright-chromium`, `playwright-firefox`, `playwright-webkit` — each is a separate MCP server; Playwright MCP restarts are required after `.claude.json` is edited
 
-### Chrome-devtools vs Playwright — decision rule
+### Playwright vs chrome-devtools — decision rule
 
 | Need | Use | Why |
 |---|---|---|
-| Single-browser Chromium: console / network / state inspect | `chrome-devtools` | More tools: lighthouse, perf trace, memory snapshot, uid interaction |
+| Single-browser Chromium: console / network / state inspect | `playwright-chromium` | Default browser MCP — navigate/click/console/network/evaluate |
+| Perf trace / memory heap snapshot | `chrome-devtools` | Tools unavailable in Playwright |
 | Bug reproduced only in Firefox | `playwright-firefox` | Real Firefox engine — emulation cannot substitute |
 | Bug reproduced only in Safari / WebKit | `playwright-webkit` | Real WebKit engine |
 | Multi-tab (same user, same session) | `playwright-*` + `browser_tabs` | Tab management within same context — cookies/storage shared across tabs |
 | Multi-session isolation (different users / cookies) | Separate Claude CLI terminals | Each terminal = isolated context (`--isolated`); do NOT use browser_tabs for session isolation |
-| Dropdown / select interaction | `playwright-*` + `browser_select_option` | chrome-devtools has no native select tool |
-| Navigate back in flow | `playwright-*` + `browser_navigate_back` | chrome-devtools cannot go back in history |
-| Drag-and-drop complete flow | `playwright-*` + `browser_drop` | chrome-devtools drag only, no drop target |
+| Dropdown / select interaction | `playwright-*` + `browser_select_option` | Native select support |
+| Navigate back in flow | `playwright-*` + `browser_navigate_back` | Full history navigation |
+| Drag-and-drop complete flow | `playwright-*` + `browser_drop` | Full drag-and-drop including drop target |
 
-### Cross-browser reproduce flow (standard)
+### Single-browser reproduce flow (playwright-chromium — standard)
 
 ```
-1. Reproduce bug in chrome-devtools first — confirm it is browser-specific (not server/code issue)
+1. browser_navigate <localhost url>
+2. browser_wait_for <selector indicating page loaded>    ← prevent flake from async/hydration
+3. Perform action that triggers the bug (browser_click / browser_fill / browser_press_key)
+4. browser_console_messages                              ← actual errors / warnings
+5. browser_network_requests                              ← XHR fail / 4xx / 5xx
+6. browser_evaluate "() => JSON.stringify(<state>)"      ← inspect runtime state at failure point
+7. (optional) browser_take_screenshot                    ← proof for user
+```
+
+### Cross-browser reproduce flow (playwright-firefox / webkit)
+
+```
+1. Reproduce bug in playwright-chromium first — confirm it is browser-specific (not server/code issue)
 2. Switch to playwright-firefox / playwright-webkit for the affected engine
 3. browser_navigate <same url>
 4. browser_wait_for <selector>
@@ -250,18 +234,22 @@ Always scan both single + double quotes; if other sites are found → fix all or
 
 | Symptom | Playwright recipe |
 |---|---|
-| "Layout broken in Safari" | `playwright-webkit` → `browser_navigate` → `browser_take_screenshot` → compare with Chromium screenshot |
-| "Dropdown doesn't work in Firefox" | `playwright-firefox` → `browser_navigate` → `browser_select_option` → `browser_console_messages` |
-| "Multi-tab session mismatch (same user)" | `playwright-chromium` → `browser_tabs` → set state in tab 1 → check tab 2 via `browser_evaluate` |
-| "Multi-session mismatch (different users)" | 2 separate Claude CLI terminals → each with own isolated context (`--isolated`) → reproduce in parallel |
-| "Back button breaks state" | `playwright-*` → navigate flow → `browser_navigate_back` → `browser_evaluate` compare state |
-| "Form submit fails only in Firefox" | `playwright-firefox` → fill form → `browser_select_option` on selects → submit → `browser_console_messages` |
+| Reactivity not updating | `playwright-chromium` → `browser_evaluate "() => JSON.stringify({ref, computed})"` before + after trigger → if unchanged = source not reactive |
+| Hydration mismatch | `playwright-chromium` → `browser_console_messages` → find `Hydration mismatch` → `browser_evaluate` compare SSR vs client output |
+| 401 cascade / auth loop | `playwright-chromium` → `browser_network_requests` → check request order → find request firing before token is ready |
+| Click no response | `playwright-chromium` → `browser_snapshot` (get uid) → `browser_click uid=X` → `browser_console_messages` check handler error |
+| Layout broken in Safari | `playwright-webkit` → `browser_navigate` → `browser_take_screenshot` → compare with Chromium screenshot |
+| Dropdown doesn't work in Firefox | `playwright-firefox` → `browser_navigate` → `browser_select_option` → `browser_console_messages` |
+| Multi-tab session mismatch (same user) | `playwright-chromium` → `browser_tabs` → set state in tab 1 → check tab 2 via `browser_evaluate` |
+| Multi-session mismatch (different users) | 2 separate Claude CLI terminals → each with own isolated context (`--isolated`) → reproduce in parallel |
+| Back button breaks state | `playwright-*` → navigate flow → `browser_navigate_back` → `browser_evaluate` compare state |
+| Form submit fails only in Firefox | `playwright-firefox` → fill form → `browser_select_option` on selects → submit → `browser_console_messages` |
 
 ### Anti-patterns (Playwright-specific — avoid)
 
-- **Switching to Playwright for single-browser issues** — chrome-devtools has more tools (lighthouse, perf, memory); use Playwright only when engine-specific behavior is the question
-- **Skipping chrome-devtools reproduce first** — always confirm in Chromium first; if it reproduces in Chromium too, the issue is not browser-specific
-- **Treating Playwright as a replacement for chrome-devtools** — both MCPs serve different roles; they are complementary not alternatives
+- **Using chrome-devtools for general debugging** — playwright-chromium is the default; use chrome-devtools only for perf trace and memory heap (tools unavailable in Playwright)
+- **Skipping playwright-chromium reproduce first** — always confirm in Chromium first; if it reproduces in Chromium too, the issue is not browser-specific
+- **Treating chrome-devtools as a replacement for playwright-chromium** — both serve different roles: playwright = navigate/inspect/interact; chrome-devtools = perf/heap only
 
 ### Fallback when Playwright MCP is unavailable
 

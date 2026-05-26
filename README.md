@@ -215,9 +215,11 @@ curl -fsSL https://raw.githubusercontent.com/colbymchenry/codegraph/main/install
 # 2. Register ใน ~/.claude.json → mcpServers
 "codegraph": { "type": "stdio", "command": "~/.local/bin/codegraph", "args": ["serve", "--mcp"] }
 
-# 3. Init ต่อ project (1 ครั้ง)
+# 3. Init ต่อ project (ทำครั้งเดียวต่อ project)
 codegraph init -i
 ```
+
+> **Auto-init:** `SessionStart` hook จะ auto-run `codegraph init -i` เมื่อเปิด session ใน project ที่มี `package.json` แต่ยังไม่มี `.codegraph/codegraph.db` — ไม่ต้อง manual สำหรับ project ใหม่
 
 ### Context7
 
@@ -366,8 +368,8 @@ grep "Universal save triggers" ~/.claude/CLAUDE.md   # ต้องเจอ
 
 **CodeGraph return empty**
 ```bash
-ls .codegraph/codegraph.db   # ถ้าไม่มี → codegraph init -i
-which codegraph              # ถ้าไม่เจอ → เช็ค PATH + ~/.claude.json
+ls .codegraph/codegraph.db   # ถ้าไม่มี → codegraph init -i (หรือรอ SessionStart hook auto-init)
+which codegraph              # ถ้าไม่เจอ → เช็ค PATH + ~/.claude.json mcpServers
 # skill fallback rg อัตโนมัติ ไม่ crash
 ```
 

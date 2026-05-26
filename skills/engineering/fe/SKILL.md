@@ -336,16 +336,16 @@ Add on components that have:
 | Surface | How | When |
 |---|---|---|
 | Human | Open browser, visually inspect | Manual QA / demo |
-| Agent (MCP) | `evaluate_script("document.querySelector('[data-state]').dataset.state")` | During fe quality gate |
+| Agent (MCP) | `browser_evaluate("() => document.querySelector('[data-state]').dataset.state")` (playwright-chromium) | During fe quality gate |
 | Headless (CI) | `bun verify` / Playwright headless reads data attributes | Pre-merge pipeline |
 
 All 3 surfaces read the same DOM contract — no parallel test logic.
 
 ---
 
-## Chrome DevTools MCP playbook (opt-in — runtime verification)
+## Browser MCP playbook (playwright-chromium — opt-in runtime verification)
 
-> Enable only when MCP `chrome-devtools` is available + the task requires verifying runtime behavior — **not the fe default** because most logic can be verified with `tsc` + tests
+> Enable only when the task requires verifying runtime behavior — **not the fe default** because most logic can be verified with `tsc` + tests. Use `playwright-chromium` for all navigate/click/console/network tasks; use `chrome-devtools` for memory heap only.
 
 ### When to open browser (opt-in trigger)
 
@@ -354,9 +354,9 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 | Refactor reactivity / state — suspected reactivity bug | `tsc` doesn't catch reactivity lost; need to click + inspect real state |
 | Fix hydration mismatch | Error lives in runtime console, invisible to static check |
 | Verify composable side-effect / cleanup | Does `onScopeDispose` fire? → need to perform action + check |
-| Suspected memory leak (modal open/close repeat) | Need `take_memory_snapshot` to compare heap |
+| Suspected memory leak (modal open/close repeat) | Need `take_memory_snapshot` (chrome-devtools) to compare heap |
 | UI changed → before claiming done | Golden path verify (replaces "ask user to try") |
-| Cross-browser hydration / reactivity difference | Need real Firefox / WebKit engine — use Playwright MCP instead |
+| Cross-browser hydration / reactivity difference | Need real Firefox / WebKit engine — use `playwright-firefox`/`webkit` |
 
 **Do not use MCP for:** writing schema, type, composable design pattern, valibot validation — verify with tests, it's faster
 
@@ -364,24 +364,24 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 
 **A. Reactivity verify (after refactor, need confidence):**
 ```
-1. navigate_page <url of that component>
-2. wait_for <element>
-3. perform action that should trigger reactivity (click button / change input)
-4. evaluate_script "check if computed/ref value changed"
-5. list_console_messages — look for warnings like `[Vue warn] Mutating a prop`
+1. browser_navigate <url of that component>
+2. browser_wait_for <element>
+3. Perform action that should trigger reactivity (browser_click / browser_fill)
+4. browser_evaluate "() => JSON.stringify({ref, computed})" — check if value changed
+5. browser_console_messages — look for warnings like `[Vue warn] Mutating a prop`
 ```
 
 **B. Hydration mismatch verify:**
 ```
-1. navigate_page <url>
-2. list_console_messages → grep "Hydration"
-3. if found → evaluate_script compare rendered value
+1. browser_navigate <url>
+2. browser_console_messages → grep "Hydration"
+3. if found → browser_evaluate compare rendered value
 4. inspect source: locale-dependent date, Math.random(), Date.now() in setup
 ```
 
-**C. Memory leak verify (composable cleanup):**
+**C. Memory leak verify (composable cleanup — chrome-devtools):**
 ```
-1. take_memory_snapshot ← baseline
+1. take_memory_snapshot ← baseline  (chrome-devtools)
 2. perform action 5-10 times (e.g. open/close modal using composable)
 3. take_memory_snapshot ← after
 4. heap growth > 5MB / detached listener > 10 = leak; check onScopeDispose
@@ -389,34 +389,34 @@ All 3 surfaces read the same DOM contract — no parallel test logic.
 
 **D. Golden path verify (replaces "ask user to try"):**
 ```
-1. navigate_page → click per spec → fill form → submit
-2. list_console_messages — clean
-3. list_network_requests — no unintended 4xx/5xx
-4. take_screenshot — proof
+1. browser_navigate → browser_click per spec → browser_fill form → submit
+2. browser_console_messages — clean
+3. browser_network_requests — no unintended 4xx/5xx
+4. browser_take_screenshot — proof
 ```
 
-**E. Cross-browser verify (Playwright — when chrome-devtools passes but user reports Firefox / Safari issue):**
+**E. Cross-browser verify (when playwright-chromium passes but user reports Firefox / Safari issue):**
 ```
 1. playwright-firefox / playwright-webkit: browser_navigate <url>
 2. browser_wait_for <element>
 3. browser_console_messages — look for hydration errors specific to that engine
 4. browser_evaluate "() => JSON.stringify(<reactive state>)" — compare with Chromium value
 5. browser_take_screenshot — visual proof of difference
-Note: use chrome-devtools for memory / perf trace; Playwright is for engine-specific behavior only
+Note: use chrome-devtools for memory / perf trace; playwright-firefox/webkit for cross-browser engine tests
 ```
 
 ### Tool selection (lean — fe does not care about visual)
 
 | Need | Tool | Token cost |
 |---|---|---|
-| Console error / Vue warn | `list_console_messages` | 500-2k ⭐ fe default |
-| Network fail | `list_network_requests` | 500-5k |
-| Inspect ref / computed / store | `evaluate_script` | 100-2k ⭐ verify reactivity |
-| Element exists + uid (before clicking) | `take_snapshot` | 5-20k — use only when needed |
-| Memory leak | `take_memory_snapshot` ×2 | 4-10k |
-| Visual proof for user | `take_screenshot` | 1-3k |
+| Console error / Vue warn | `browser_console_messages` (playwright-chromium) | 500-2k ⭐ fe default |
+| Network fail | `browser_network_requests` (playwright-chromium) | 500-5k |
+| Inspect ref / computed / store | `browser_evaluate` (playwright-chromium) | 100-2k ⭐ verify reactivity |
+| Element exists + uid (before clicking) | `browser_snapshot` (playwright-chromium) | 5-20k — use only when needed |
+| Memory leak | `take_memory_snapshot` ×2 (chrome-devtools) | 4-10k |
+| Visual proof for user | `browser_take_screenshot` (playwright-chromium) | 1-3k |
 
-**Rule:** fe defaults to `list_console_messages` + `evaluate_script` — not `take_snapshot`/`take_screenshot` like ux
+**Rule:** fe defaults to `browser_console_messages` + `browser_evaluate` — not `browser_snapshot`/`browser_take_screenshot` like ux
 
 ### Anti-patterns (MCP for fe)
 
@@ -441,8 +441,10 @@ Note: use chrome-devtools for memory / perf trace; Playwright is for engine-spec
 
 | Situation | Action |
 |---|---|
-| First time using a specific Nuxt UI component prop | `resolve-library-id nuxt/ui` → `query-docs "/nuxt/ui <component> <prop>"` |
-| Valibot method with uncertain signature | `resolve-library-id fabian-hiller/valibot` → `query-docs "/fabian-hiller/valibot <method>"` |
+| Writing any Nuxt UI component with props/slots/events not in `fe/learnings.md` | `resolve-library-id nuxt/ui` → `query-docs "/nuxt/ui <component> <prop>"` |
+| Writing any Valibot method or validator | `resolve-library-id fabian-hiller/valibot` → `query-docs "/fabian-hiller/valibot <method>"` |
+| Writing useFetch / useAsyncData options (headers, server, lazy, etc.) | `resolve-library-id nuxt/nuxt` → `query-docs "/nuxt/nuxt <option>"` |
+| Error may be caused by library version change / breaking change | Query always — even if pattern seems familiar |
 | Pattern already confirmed in `fe/learnings.md` | Skip — use cached pattern |
 | Internal custom composable / no external library | Skip |
 
@@ -477,12 +479,12 @@ mcp__context7__query-docs libraryId="/nuxt/ui" query="Nuxt UI"
 - [ ] **`rtk proxy yarn nuxt prepare`** succeeds (refresh auto-imports + types)
 
 ### UI verify (when UI changed)
-- [ ] golden path verified — `verify` skill or chrome-devtools MCP playbook section D
+- [ ] golden path verified — `verify` skill or playwright-chromium MCP (browser_navigate → browser_click → browser_snapshot → browser_console_messages)
 - [ ] edge cases ≥ 2 from spec (empty, error) — verify in real browser
-- [ ] network tab clean — `list_network_requests` no unintended 4xx/5xx
-- [ ] console clean — `list_console_messages` no error/warn regression
-- [ ] mobile 375px not broken — `resize_page 375` + screenshot
-- [ ] **Agent-native contract** — key visual states expose `data-*` attributes (`data-state` / `data-item-count` / `data-form-valid`) readable via `evaluate_script`
+- [ ] network tab clean — `browser_network_requests` no unintended 4xx/5xx
+- [ ] console clean — `browser_console_messages` no error/warn regression
+- [ ] mobile 375px not broken — `browser_resize 375` + `browser_take_screenshot`
+- [ ] **Agent-native contract** — key visual states expose `data-*` attributes (`data-state` / `data-item-count` / `data-form-valid`) readable via `browser_evaluate`
 
 If dev server isn't ready → tell user "cannot verify manually — please test: [steps]" **never claim "done" silently**
 
