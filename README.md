@@ -138,7 +138,7 @@ cd ~/Project/claude-skill-copy
 | Step | Action |
 |---|---|
 | 0 | ติดตั้ง system deps |
-| 1 | Symlink 7 skills → `~/.claude/skills/` |
+| 1 | Symlink skills → `~/.claude/skills/` |
 | 2 | ติดตั้ง `~/.claude/CLAUDE.md` + `RTK.md` |
 | 3 | สร้าง `~/.claude/memory/` + `projects/` |
 | 4 | ติดตั้ง lint hook (PostToolUse) |
@@ -149,7 +149,7 @@ cd ~/Project/claude-skill-copy
 ### Verify
 
 ```bash
-ls -la ~/.claude/skills/     # เห็น 7 symlinks
+ls -la ~/.claude/skills/     # เห็น symlinks → repo
 head ~/.claude/CLAUDE.md     # ขึ้น "@RTK.md" + "Universal Phase 0"
 claude mcp list              # เห็น "chrome-devtools"
 ```
@@ -260,6 +260,7 @@ codegraph init -i
 | [`debug`](skills/engineering/debug/SKILL.md) | Bug diagnosis | ✅ single-browser | ✅ cross-browser + select/back/tabs |
 | [`migrate`](skills/engineering/migrate/SKILL.md) | Bulk transformation หลายไฟล์ | — | — |
 | [`audit`](skills/engineering/audit/SKILL.md) | Project health sweep | ✅ lighthouse / perf / memory | ✅ cross-browser a11y |
+| [`pr`](skills/misc/pr/SKILL.md) | เขียน + เปิด GitHub PR description | — | — |
 | [`_template`](skills/misc/_template/SKILL.md) | Skeleton สำหรับ skill ใหม่ | — | — |
 
 แต่ละ skill folder มี: `SKILL.md` · `learnings.md` · `REFERENCE.md` (fe เท่านั้น)
