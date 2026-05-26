@@ -33,8 +33,18 @@ MEMORY_DIR = HOME / ".claude" / "memory"
 PROJECTS_DIR = HOME / ".claude" / "projects"
 
 VALID_MEMORY_TYPES = {"user", "feedback", "project", "reference"}
-VALID_SKILL_TAGS = {"fe", "ux", "sa", "debug", "migrate", "audit", "cross"}
+VALID_SKILL_TAGS = {
+    "fe", "ux", "sa", "debug", "migrate", "audit", "cross",
+    "pr", "review", "verify", "simplify", "run", "security-review", "distill-memory",
+}
 VALID_SCOPES = {"global", "project"}
+
+# Size thresholds — keeping these in sync with token-budget audit (see global memory
+# feedback-secrets-outside-repo / per-turn loading audit). Hooks warn early so we
+# notice regrowth before it eats the Phase 0 echo budget or the 200-line cap.
+MEMORY_BODY_WARN_BYTES = 1500       # individual memory entry body
+SKILL_MD_WARN_BYTES = 25_000        # any single SKILL.md
+CLAUDE_MD_WARN_BYTES = 35_000       # top-level CLAUDE.md (loaded every turn)
 
 KEBAB = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 LINK = re.compile(r"\[\[([a-z0-9_-]+)\]\]")
@@ -135,6 +145,11 @@ def lint_memory_file(path: Path) -> str | None:
         if sc is not None and sc not in VALID_SCOPES:
             err(path, f"metadata.scope '{sc}' not in {sorted(VALID_SCOPES)}")
 
+    # Body size guard — large bodies inflate every [[link]] read + Phase 0 echo costs
+    body_size = len(body.encode("utf-8")) if body else 0
+    if body_size > MEMORY_BODY_WARN_BYTES:
+        warn(path, f"body {body_size} bytes (> {MEMORY_BODY_WARN_BYTES}) — compact via /distill-memory")
+
     return name if is_kebab else None
 
 
@@ -201,8 +216,25 @@ def lint_skill_dir(dir_path: Path) -> None:
         if key not in fm or fm[key] in (None, ""):
             err(skill_md, f"missing required field '{key}'")
 
+    # Size guard — SKILL.md is loaded whenever the skill is invoked; bloat costs every invocation
+    skill_size = skill_md.stat().st_size
+    if skill_size > SKILL_MD_WARN_BYTES:
+        warn(skill_md, f"SKILL.md {skill_size} bytes (> {SKILL_MD_WARN_BYTES}) — extract reference docs to a side file")
+
+
+def lint_claude_md() -> None:
+    """CLAUDE.md is loaded EVERY turn — most expensive file in the system."""
+    claude_md = HOME / ".claude" / "CLAUDE.md"
+    if not claude_md.exists():
+        return
+    size = claude_md.stat().st_size
+    if size > CLAUDE_MD_WARN_BYTES:
+        warn(claude_md, f"CLAUDE.md {size} bytes (> {CLAUDE_MD_WARN_BYTES}) — extract MCP/reference sections to ~/.claude/mcp-guides/*.md or skill-local docs")
+
 
 def lint_all() -> None:
+    lint_claude_md()
+
     if SKILLS_DIR.exists():
         for entry in sorted(SKILLS_DIR.iterdir()):
             if entry.is_dir() or entry.is_symlink():

@@ -230,6 +230,26 @@ install_template "$REPO/CLAUDE.template.md" "$HOME_CLAUDE/CLAUDE.md" "CLAUDE.md"
 note "Installing RTK.md (optional — for RTK CLI users)"
 install_template "$REPO/RTK.template.md" "$HOME_CLAUDE/RTK.md" "RTK.md"
 
+# MCP integration guides — referenced from CLAUDE.md, loaded on-demand by skills.
+# Extracted out of CLAUDE.md to keep per-turn cost low (CLAUDE.md is loaded every turn).
+note "Installing MCP guides (loaded on-demand by skills)"
+if [ -d "$REPO/mcp-guides" ]; then
+  mkdir -p "$HOME_CLAUDE/mcp-guides"
+  for guide in "$REPO/mcp-guides"/*.md; do
+    [ -f "$guide" ] || continue
+    name="$(basename "$guide")"
+    dst="$HOME_CLAUDE/mcp-guides/$name"
+    if [ -f "$dst" ] && cmp -s "$guide" "$dst"; then
+      ok "mcp-guides/$name already up-to-date"
+    else
+      cp "$guide" "$dst"
+      ok "Installed mcp-guides/$name"
+    fi
+  done
+else
+  warn "$REPO/mcp-guides missing — skipping (skill MCP references will fall back to CLAUDE.md stub)"
+fi
+
 # ---------- 4. Memory dirs ----------
 
 note "Bootstrapping memory directories"
