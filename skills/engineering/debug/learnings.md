@@ -166,15 +166,11 @@ if (res.data?.length > 0) {
 **Tags:** nuxt-ui, reka-ui, USelect, USelectMenu, runtime-throw
 **Date:** 2026-05-16
 
-**Symptom:** Runtime error: `SelectItem must have a value prop that is not an empty string` on component mount — error originates from Reka UI internals (stack does not point directly at the items array)
-**Root cause:** `items` array of `USelect` / `USelectMenu` contains an element with `value: ''` (empty string) — Reka UI reserves `''` as the sentinel for "no selection"
-**Fix pattern:**
-- Change `value: ''` → `value: null` or `value: undefined` (if the component can handle it)
-- For an "All" option → use a string sentinel like `'__ALL__'` and map back to undefined in a computed
-- When migrating native `<select><option value="">...</option></select>` → never map straight to `{ value: '' }`
-**Detection:**
-- Grep cross-pattern (both single + double quotes): `rg "value:\s*['\"]['\"]" --type ts --type vue`
-- Dev console error → Reka UI throw → inspect component tree for the active `USelect` on that page
+**Symptom:** Runtime error: `SelectItem must have a value prop that is not an empty string` on component mount
+**Root cause:** `items` array contains `value: ''` — Reka UI reserves `''` as the sentinel for "no selection"
+**Fix pattern:** Change `value: ''` → `value: null` or use sentinel string `'__ALL__'`
+**Detection:** `rg "value:\s*['\"]['\"]" --type ts --type vue`
+**See also:** [[select-item-value-must-not-be-empty-string]] in `fe/learnings.md` (primary — full detail + migration guide)
 
 ## multi-tab-reload-loop-on-401
 

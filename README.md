@@ -91,6 +91,9 @@ Then pipelines `sa → ux → fe → verify` automatically.
 | [`audit`](skills/engineering/audit/SKILL.md) | audit / health check / ตรวจ project | Lighthouse · dead code · bundle · dep security |
 | [`verify`](skills/misc/verify/SKILL.md) | ทดสอบ / confirm / verify | Playwright browser test — not just `tsc` |
 | [`pr`](skills/misc/pr/SKILL.md) | เขียน PR / สร้าง PR | Auto-draft PR description from git diff |
+| [`review`](skills/misc/review/SKILL.md) | review / code review / ดู PR / ตรวจโค้ด | Code review — bugs · anti-patterns · type safety · logic errors |
+| [`simplify`](skills/misc/simplify/SKILL.md) | simplify / ลด code / clean up / duplication | Dead code · duplication · over-complex logic — after fe/debug only |
+| [`distill-memory`](skills/misc/distill-memory/SKILL.md) | distill-memory / จัดการ memory / clean up memory | Memory maintenance — prune stale · consolidate duplicates · promote lessons |
 
 ### The Frontend Pipeline
 
@@ -203,17 +206,24 @@ No need to repeat your stack every prompt. Claude picks the right defaults.
 ```
 skills/
 ├── engineering/
-│   ├── sa/        # System Analyst + Security Audit
-│   ├── ux/        # Visual + Interaction Design
-│   ├── fe/        # Frontend Code (Vue / Nuxt / React / TS)
-│   ├── debug/     # Bug Diagnosis — root cause, not symptom
-│   ├── migrate/   # Bulk Pattern Transformation
-│   └── audit/     # Project Health (Lighthouse · dead code · deps)
+│   ├── sa/             # System Analyst + Security Audit
+│   ├── ux/             # Visual + Interaction Design
+│   ├── fe/             # Frontend Code (Vue / Nuxt / React / TS)
+│   ├── debug/          # Bug Diagnosis — root cause, not symptom
+│   ├── migrate/        # Bulk Pattern Transformation
+│   └── audit/          # Project Health (Lighthouse · dead code · deps)
 └── misc/
-    ├── verify/    # Playwright Browser Verification
-    ├── run/       # Dev Server + Screenshot
-    ├── pr/        # PR Description Writer
-    └── _template/ # Skeleton for new skills
+    ├── verify/         # Playwright Browser Verification
+    ├── run/            # Dev Server + Screenshot
+    ├── pr/             # PR Description Writer
+    ├── review/         # Code Review — bugs · anti-patterns · type safety
+    ├── simplify/       # Reduce Code Surface — dead code · duplication
+    ├── distill-memory/ # Memory Distillation — prune · promote · audit
+    └── _template/      # Skeleton for new skills
+hooks/
+    ├── lint-on-edit.sh          # PostToolUse → run linter after every edit
+    ├── check-cross-project.py   # SessionStart (async) → flag memory slugs in ≥2 projects
+    └── post-compact.py          # PostCompact → show in-progress checkpoints as systemMessage
 ```
 
 ---
@@ -253,7 +263,9 @@ That eliminates anchoring bias, fix-by-coincidence, and skipped ripple checks.
 Memory tells Claude every time it encounters the same pattern.  
 And it gets smarter session after session without manual editing.
 
-**Phase checkpoint > "remember context"** — large tasks save an artifact at every phase boundary. Resume from the exact step that was in progress — even after context is compacted.
+**Phase checkpoint > "remember context"** — large tasks save an artifact at every phase boundary. The `post-compact.py` hook surfaces any in-progress checkpoint as a systemMessage after compaction. Phase 0 then loads it and asks whether to resume or start fresh.
+
+**Cross-project auto-flag** — `check-cross-project.py` runs at SessionStart (async, zero latency) and scans all project memories for `name:` slugs appearing in ≥ 2 projects. Pre-populates `/distill-memory` promotion candidates so no repeated lesson slips through.
 
 ---
 

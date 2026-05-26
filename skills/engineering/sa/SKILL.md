@@ -143,7 +143,13 @@ Goal: output that a dev can implement immediately **without interpretation**
 
 **0. Intent + simpler-way gate (always do before Step 1)**
 
-Before gathering requirement / spec — ask 4 alternatives + 1-line rationale each:
+**Skip this gate entirely (go straight to Step 1) when any of these are true:**
+- User provides a complete spec (data model + API shape + flows all explicitly stated) — nothing left to simplify
+- Task is a targeted fix on an already-identified component/field — scope is already minimal
+- User is resuming from a phase checkpoint — direction was already confirmed in a prior turn
+- User says "implement X as-is", "ตาม spec นี้เลย", "ทำตามที่บอก" — explicit confirmation to proceed
+
+Otherwise — ask 4 alternatives + 1-line rationale each:
 
 - **Do nothing.** Is the problem actually load-bearing? What's the cost of not doing it?
 - **Use what already exists.** Can an existing component / composable / endpoint / pattern be used instead? (cross-ref project memory + `app/components/` + `app/composables/` + `service/`)
