@@ -61,6 +61,28 @@ cd ~/Project/claude-skill-copy
 ./scripts/setup.sh
 ```
 
+### Optional install flags
+
+Default `./scripts/setup.sh` ติดตั้งแค่ core (skills + memory + hooks + playwright-chromium). ส่วน MCP extras + automation ให้ opt-in:
+
+| Flag | ทำอะไร | เมื่อไหร่ควรใช้ |
+|---|---|---|
+| `--with-codegraph` | ลง CodeGraph binary + register MCP | งาน ripple check ที่ใหญ่ — `sa`/`fe`/`debug`/`migrate` ใช้แทน `rg` |
+| `--with-context7` | Register Context7 MCP | ดึง live docs ของ Nuxt UI / Valibot / library เวอร์ชันใหม่ |
+| `--with-playwright` | Register playwright-firefox + playwright-webkit | ต้อง test cross-browser engine (Safari/Firefox) |
+| `--with-chrome-devtools` | Register chrome-devtools MCP | ใช้ Lighthouse / perf trace / memory heap |
+| `--with-weekly-distill` | ลง cron Mon 09:00 + Telegram digest | อยาก auto-detect promotion candidates รายสัปดาห์ (ต้องมี `~/.claude/.secrets/tg.env`) |
+
+Flags ที่ใช้สลับ default:
+- `--force` — overwrite `CLAUDE.md` / `RTK.md` ที่มีอยู่ (destructive)
+- `--skip-mcp` — ข้าม playwright-chromium install
+- `--skip-deps` — ข้าม auto-install ของ `rg` (ripgrep) ฯลฯ
+
+```bash
+# ติดตั้งครบเซ็ตที่ใช้บ่อยที่สุด
+./scripts/setup.sh --with-codegraph --with-context7 --with-weekly-distill
+```
+
 Open Claude Code in any project. Type naturally:
 
 ```
@@ -246,6 +268,13 @@ hooks/
     └── rtk-rewrite.sh           # PreToolUse → rewrite shell commands via RTK for token savings
 .secrets-template/
     └── tg.env.example           # Copy to ~/.claude/.secrets/tg.env (chmod 600) — never commit real values
+scripts/
+    ├── setup.sh                 # Bootstrap a fresh machine — see Quickstart flags
+    ├── link-skills.sh           # Symlink skills/* → ~/.claude/skills/ (called by setup.sh)
+    ├── list-skills.sh           # Print currently linked skills
+    ├── lint-skills.py           # Validate frontmatter + link refs across skills + memory
+    ├── distill-dry-run.py       # Memory tier scanner — emits markdown digest (read-only)
+    └── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
 ```
 
 > **Secrets convention** — credentials never live inside committable scripts. Hooks that need
