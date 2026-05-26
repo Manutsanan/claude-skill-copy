@@ -352,6 +352,10 @@ POST_COMPACT_HOOK_SRC="$REPO/hooks/post-compact.py"
 POST_COMPACT_HOOK_DST="$HOME_CLAUDE/hooks/post-compact.py"
 INJECT_HOOK_SRC="$REPO/hooks/inject-checkpoint.py"
 INJECT_HOOK_DST="$HOME_CLAUDE/hooks/inject-checkpoint.py"
+CHECKPOINT_LIB_SRC="$REPO/hooks/_checkpoint_lib.py"
+CHECKPOINT_LIB_DST="$HOME_CLAUDE/hooks/_checkpoint_lib.py"
+MEM_SIZE_HOOK_SRC="$REPO/hooks/check-memory-size.py"
+MEM_SIZE_HOOK_DST="$HOME_CLAUDE/hooks/check-memory-size.py"
 
 if ! command -v python3 &>/dev/null; then
   warn "python3 not found — skipping lifecycle hooks (skills still work without them)"
@@ -366,10 +370,14 @@ else
   fi
 
   # Copy hook scripts (not symlinked — standalone Python, not skill assets)
+  # _checkpoint_lib.py is a shared module imported by post-compact + inject-checkpoint —
+  # must be copied alongside them or both hooks fail.
   for PAIR in \
     "$CROSS_PROJECT_HOOK_SRC:$CROSS_PROJECT_HOOK_DST" \
+    "$CHECKPOINT_LIB_SRC:$CHECKPOINT_LIB_DST" \
     "$POST_COMPACT_HOOK_SRC:$POST_COMPACT_HOOK_DST" \
-    "$INJECT_HOOK_SRC:$INJECT_HOOK_DST"; do
+    "$INJECT_HOOK_SRC:$INJECT_HOOK_DST" \
+    "$MEM_SIZE_HOOK_SRC:$MEM_SIZE_HOOK_DST"; do
     SRC="${PAIR%%:*}"
     DST="${PAIR##*:}"
     FNAME="$(basename "$DST")"
@@ -401,6 +409,23 @@ else
       .hooks.SessionStart += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
     ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
     ok "Registered SessionStart hook (check-cross-project.py async)"
+  fi
+
+  # Register SessionStart hook — check-memory-size.py (async, warns when memory > 30 entries)
+  MEM_SIZE_CMD="python3 $MEM_SIZE_HOOK_DST"
+  if jq -e --arg cmd "$MEM_SIZE_CMD" \
+    '.hooks.SessionStart // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "SessionStart hook (check-memory-size.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$MEM_SIZE_CMD" '
+      .hooks //= {} |
+      .hooks.SessionStart //= [] |
+      .hooks.SessionStart += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered SessionStart hook (check-memory-size.py async)"
   fi
 
   # Register PostCompact hook — post-compact.py (shows systemMessage + writes sentinel)

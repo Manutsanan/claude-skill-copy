@@ -2,3 +2,8 @@
 node_modules/
 *.log
 .codegraph/
+
+# Never commit secret material — credentials live outside the repo
+.secrets/
+.env
+.env.local
