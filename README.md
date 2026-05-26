@@ -288,6 +288,52 @@ mcp-guides/
 
 ---
 
+## 🧹 Memory distillation rhythm
+
+Memory grows automatically (8 save triggers in CLAUDE.md). Without pruning it becomes a graveyard — duplicate entries cost tokens every Phase 0 echo, stale entries actively mislead. **Detection is automated; application stays manual.**
+
+### Auto-detection (no input from you)
+
+| Mechanism | When | Output |
+|---|---|---|
+| `hooks/check-cross-project.py` | SessionStart (async) | Writes `~/.claude/memory/.cross-project-candidates.md` for slugs in ≥ 2 projects |
+| `hooks/check-memory-size.py` | SessionStart (async) | `systemMessage` when current project ≥ 30 entries (critical at 45) |
+| `scripts/distill-dry-run.py` | Mon 09:00 cron (`--with-weekly-distill`) | Telegram digest + archive at `~/.claude/memory/.last-distill-report.md` |
+
+Sample weekly digest:
+
+```
+# 📚 Weekly memory distill — 2026-05-27
+
+## 🟢 Cross-project promotion candidates
+- **select-item-value-empty-string** — 3 projects: boonphone, mcop-web-manage, mcop-web-manage-v2
+
+## ⚠️ Memory caps (≥ 30 entries)
+- 🟡 warn **Project-mcop-web-manage** — 36 entries
+- 🟡 warn **Project-mcop-web-manage-v2** — 30 entries
+
+## 📊 Tier snapshot
+- Global tier: 15 entries
+- Projects scanned: 10
+- Skill learnings files: 14
+
+Next step: open a Claude session and run `/distill-memory` to review + apply.
+```
+
+### Manual application (you trigger)
+
+Type `/distill-memory` in any session. The skill:
+
+1. Scans all 3 tiers (global · project · skill learnings) — never trusts the index alone
+2. Shows a proposal table — `PROMOTE` / `PRUNE` / `CROSS-LINK` candidates with sizes + reasons
+3. **Waits for your confirmation before any write**
+4. On apply: writes destination → deletes source (never duplicates) → updates `MEMORY.md` indexes
+5. Returns a tier snapshot diff so you can see exactly what changed
+
+Auto-promotion is intentionally **not** implemented. "Same slug in 2 projects" is a noisy signal — the model reading actual entry bodies catches false promotions that a heuristic script would push through. The cost of a wrong global promotion is paid by every Phase 0 echo until you notice.
+
+---
+
 ## 🩺 Troubleshooting
 
 **Skill not triggering**
