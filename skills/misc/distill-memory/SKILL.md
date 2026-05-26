@@ -43,6 +43,7 @@ Distill progress:
 find ~/.claude/projects -name "MEMORY.md"
 
 # List all skill learnings
+# NOTE: ~/.claude/skills/* are symlinks — use ls glob (NOT find without -L; it returns 0 results)
 ls ~/.claude/skills/*/learnings.md
 
 # Global memory

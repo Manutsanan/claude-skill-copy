@@ -30,7 +30,7 @@ def main():
     for cp_file in sorted(checkpoint_dir.glob("project_phase_checkpoint_*.md")):
         try:
             text = cp_file.read_text(encoding="utf-8", errors="ignore")
-            if re.search(r"^status:\s*in_progress", text, re.MULTILINE):
+            if re.search(r"^\s*status:\s*in_progress", text, re.MULTILINE):
                 checkpoints.append((cp_file.name, text.strip()))
         except Exception:
             pass
