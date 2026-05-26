@@ -28,6 +28,7 @@ set -euo pipefail
 #   --with-chrome-devtools  Register chrome-devtools MCP (Lighthouse/perf/memory, opt-in)
 #   --with-codegraph        Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
 #   --with-context7         Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
+#   --with-weekly-distill   Install weekly memory distill cron (Mon 09:00) — opt-in, requires Telegram credentials at ~/.claude/.secrets/tg.env
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -40,6 +41,7 @@ WITH_PLAYWRIGHT=0
 WITH_CHROME_DEVTOOLS=0
 WITH_CODEGRAPH=0
 WITH_CONTEXT7=0
+WITH_WEEKLY_DISTILL=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
@@ -50,6 +52,7 @@ for arg in "$@"; do
     --with-chrome-devtools) WITH_CHROME_DEVTOOLS=1 ;;
     --with-codegraph) WITH_CODEGRAPH=1 ;;
     --with-context7) WITH_CONTEXT7=1 ;;
+    --with-weekly-distill) WITH_WEEKLY_DISTILL=1 ;;
     -h|--help)
       sed -n '3,26p' "$0"
       exit 0
@@ -719,6 +722,70 @@ else
       echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
     fi
   fi
+fi
+
+# ---------- 11. Weekly memory distill cron (opt-in) ----------
+#
+# Installs a macOS cron entry that runs Mon 09:00 local time:
+#   scripts/distill-dry-run.py → markdown digest
+#   scripts/distill-dry-run-notify.sh → sends digest to Telegram + archives to ~/.claude/memory/.last-distill-report.md
+#
+# Requires Telegram credentials at ~/.claude/.secrets/tg.env (chmod 600). If they're
+# absent the report is still archived locally; the cron job exits 0 either way.
+# Skip without --with-weekly-distill — most users won't want a weekly TG ping.
+
+if [ "$WITH_WEEKLY_DISTILL" -eq 1 ]; then
+  note "Installing weekly memory distill cron (Mon 09:00)"
+
+  DISTILL_SCANNER_SRC="$REPO/scripts/distill-dry-run.py"
+  DISTILL_SCANNER_DST="$HOME_CLAUDE/scripts/distill-dry-run.py"
+  DISTILL_NOTIFY_SRC="$REPO/scripts/distill-dry-run-notify.sh"
+  DISTILL_NOTIFY_DST="$HOME_CLAUDE/scripts/distill-dry-run-notify.sh"
+
+  mkdir -p "$HOME_CLAUDE/scripts"
+  for PAIR in \
+    "$DISTILL_SCANNER_SRC:$DISTILL_SCANNER_DST" \
+    "$DISTILL_NOTIFY_SRC:$DISTILL_NOTIFY_DST"; do
+    SRC="${PAIR%%:*}"
+    DST="${PAIR##*:}"
+    if [ ! -f "$SRC" ]; then
+      warn "$(basename "$DST") missing in repo — skipping cron install"
+      WITH_WEEKLY_DISTILL=0
+      break
+    fi
+    if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+      ok "$(basename "$DST") already up-to-date"
+    else
+      cp "$SRC" "$DST"
+      chmod +x "$DST"
+      ok "Installed $(basename "$DST")"
+    fi
+  done
+
+  if [ "$WITH_WEEKLY_DISTILL" -eq 1 ]; then
+    CRON_LINE="0 9 * * 1 $DISTILL_NOTIFY_DST >> $HOME_CLAUDE/memory/.distill-cron.log 2>&1"
+    if crontab -l 2>/dev/null | grep -qF "$DISTILL_NOTIFY_DST"; then
+      ok "Weekly cron already registered"
+    else
+      EXISTING="$(crontab -l 2>/dev/null || true)"
+      {
+        if [ -n "$EXISTING" ]; then printf '%s\n' "$EXISTING"; fi
+        echo "# Weekly memory distill dry-run → Telegram digest (added by setup.sh)"
+        echo "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        echo "$CRON_LINE"
+      } | crontab -
+      ok "Registered cron: $CRON_LINE"
+      warn "First run is next Monday 09:00. Run manually now: $DISTILL_NOTIFY_DST"
+    fi
+
+    if [ ! -f "$HOME_CLAUDE/.secrets/tg.env" ]; then
+      warn "TG credentials not found at ~/.claude/.secrets/tg.env"
+      warn "Cron will run + archive locally, but no Telegram message will be sent."
+      warn "To enable: cp $REPO/.secrets-template/tg.env.example ~/.claude/.secrets/tg.env && chmod 600 ~/.claude/.secrets/tg.env && \$EDITOR ~/.claude/.secrets/tg.env"
+    fi
+  fi
+else
+  note "Weekly distill cron skipped (add --with-weekly-distill to enable)"
 fi
 
 # ---------- Summary ----------

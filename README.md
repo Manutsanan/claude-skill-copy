@@ -296,6 +296,8 @@ And it gets smarter session after session without manual editing.
 
 **Memory-cap guardrail** — `check-memory-size.py` runs at SessionStart (async) and emits a `systemMessage` warning when the current project's memory crosses **30 entries** (critical at **45**). `MEMORY.md` truncates after 200 lines, so silently oversized memory degrades Phase 0 echoes — this catches it before quality drops.
 
+**Weekly distill digest (opt-in)** — `scripts/distill-dry-run.py` scans all tiers and produces a markdown digest (cross-project promotion candidates + memory-cap status + tier counts). Install via `./scripts/setup.sh --with-weekly-distill` to register a Monday 09:00 cron that ships the digest to Telegram + archives to `~/.claude/memory/.last-distill-report.md`. **Detection is auto, application stays manual** — open a session and run `/distill-memory` to review + apply. Requires Telegram credentials at `~/.claude/.secrets/tg.env` (chmod 600).
+
 ---
 
 ## License · Credits

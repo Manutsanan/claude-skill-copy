@@ -94,3 +94,38 @@
 - Best practice: composable returns `refs` directly from the start — `return { count: ref(0), items: ref([]) }` instead of `reactive({...})` — consumers can destructure straight without toRefs
 - React equivalent pitfall: passing `{...state}` into useState — different primitive snapshot, but conceptually similar problem
 
+## nuxt-icon-collections-must-match-source
+
+**Tags:** nuxt-icon, iconify, bundle, missing-collection, dev-server-restart
+**Date:** 2026-05-27 (graduated from mcop-web-manage + mcop-web-manage-v2)
+
+**Context:** A `<Icon :name="collection:icon">` references an Iconify collection that isn't installed as `@iconify-json/<collection>` → icon renders empty → buttons look invisible → user sees a blank cell where there should be an action button. Independently happened in 2 Nuxt projects.
+**Lesson:** Every Iconify collection prefix used in source must have its matching `@iconify-json/<collection>` package installed AND the dev server restarted after install (Nuxt Icon discovers collections at server start only, not via HMR).
+**How to apply:**
+- After adding a new `<Icon name="...">`, after migrating components from another repo, or after pulling a branch that introduces new icons → scan + reconcile before claiming done
+- Use multiple scan patterns — single-quote, double-quote, multi-line `<Icon\n  name="...">`, dynamic `:name="\`prefix:${var}\`"`, data arrays `icon: "..."`, custom-icon-class props
+- Similar-looking prefixes are **different packages**: `bx` ≠ `bxs`, `streamline` ≠ `streamline-ultimate`, `fa6-brands` ≠ `fa6-solid`
+- After `yarn add @iconify-json/*` → restart dev server (HMR will not pick up new collection registry)
+- Production acid test: `rm -rf .nuxt .output && yarn build` — if build succeeds, every referenced icon has a registered data source
+- See full scan-pattern playbook + detection scripts in source project memories (mcop-web-manage-v2/`feedback_icon_bundling_workflow`, mcop-web-manage/`feedback_iconify_packages_must_match_usage`)
+
+## vite-cache-recovery-rules
+
+**Tags:** vite, nuxt, dev-server, cache, hmr, dep-install, syntax-error
+**Date:** 2026-05-27 (graduated from mcop-web-manage + mcop-web-manage-v2)
+
+**Context:** Two distinct but related Vite/Nuxt dev-server cache pitfalls that recurred across 2 projects — `Re-optimizing dependencies` after `yarn add` doesn't invalidate all pre-bundled chunks; and Vite caches a module's parse error across HMR cycles, refusing to re-parse even after the disk content is fixed.
+**Lesson:** Vite's dev-server cache is not always trustworthy. Some state changes require a full process restart, not HMR.
+**How to apply:**
+
+| Trigger | Action |
+|---|---|
+| Ran `yarn add` / `yarn workspace <app> add` while dev server was running | Stop server → `rm -rf .nuxt node_modules/.cache` → restart |
+| Added a new Iconify collection package | Same as above (Nuxt Icon discovers on startup only) |
+| Added a new `@source` path in Tailwind config | Restart dev server (JIT scans paths at startup) |
+| Vite reports a syntax error pointing at line content that **doesn't match the disk** anymore | TaskStop + restart dev server. HMR cannot recover — touching, re-saving, deleting+recreating the file all fail |
+| Same error after cache clear (hash changed but message identical) | Suspect corrupt install — check `ls node_modules/<pkg>/dist/` exists; if not, nuke `node_modules` at workspace root + apps/* + packages/* and reinstall |
+
+- Pure source-code HMR edits do NOT require a restart — cache is valid in that case
+- See full detection scripts + escalation playbook in source project memories (mcop-web-manage/`project_vite_cache_after_install`, mcop-web-manage-v2/`feedback_vite_cache_stuck_after_syntax_error`)
+

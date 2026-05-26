@@ -188,3 +188,21 @@ if (res.data?.length > 0) {
 - Grep `location.reload()` in auth handler / interceptor / middleware
 - Console: 401 response loop + "Navigation cancelled" warning from Vue Router
 
+## validate-root-cause-before-invasive-edits
+
+**Tags:** debug-discipline, bulk-edit, revert-flip, hypothesis-testing
+**Date:** 2026-05-27 (graduated from boonphone project memory)
+
+**Symptom:** A bug suggests a fix that would touch many files (10+) or requires reverting / un-reverting a recent commit. Pattern of "edit-revert-edit" oscillation on the same commit.
+**Root cause:** Acting on an unverified hypothesis. The "obvious" cause is often a symptom; the real fix is usually architectural (a few central files) not scattershot (many leaf files).
+**Fix pattern:**
+- Before any bulk edit, state the hypothesis explicitly. List ≥ 2 alternative root causes. Propose 1 cheap verification step (single-file probe, browser test, doc check, codegraph callers) before committing to the bulk change.
+- When tempted to revert→un-revert→revert: stop. Each oscillation costs trust. Lay out the trade-offs of each side and let the user pick.
+- Default preference: architectural fix touching few central files > scattered fixes across many leaves. When both are plausible, the central fix is closer to the real root cause.
+**Detection:**
+- About to use Edit on > 10 files within one task → trigger this check
+- Considering `git revert` on a commit you also recently authored → trigger this check
+- User pushback like "เหมือนจะแก้ๆไปๆมาๆนะ / วิเคราะห์ให้ดีก่อนปรับแก้ไหม" → already past the violation
+**See also:** [[feedback-verify-multi-pattern-before-claiming]] (global) — verify after the fix; this rule covers verify before the fix
+
+
