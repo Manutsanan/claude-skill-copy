@@ -272,9 +272,14 @@ scripts/
     ├── setup.sh                 # Bootstrap a fresh machine — see Quickstart flags
     ├── link-skills.sh           # Symlink skills/* → ~/.claude/skills/ (called by setup.sh)
     ├── list-skills.sh           # Print currently linked skills
-    ├── lint-skills.py           # Validate frontmatter + link refs across skills + memory
+    ├── lint-skills.py           # Validate frontmatter + link refs + size budgets (memory body, SKILL.md, CLAUDE.md)
     ├── distill-dry-run.py       # Memory tier scanner — emits markdown digest (read-only)
     └── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
+mcp-guides/
+    ├── browser.md               # Browser MCP (playwright-chromium default + chrome-devtools for Lighthouse/perf/memory)
+    ├── codegraph.md             # CodeGraph MCP — semantic ripple/call-path/impact
+    ├── context7.md              # Context7 MCP — live library docs
+    └── figma.md                 # Figma MCP — design file load + node thumbnails + comments
 ```
 
 > **Secrets convention** — credentials never live inside committable scripts. Hooks that need
@@ -326,6 +331,10 @@ And it gets smarter session after session without manual editing.
 **Memory-cap guardrail** — `check-memory-size.py` runs at SessionStart (async) and emits a `systemMessage` warning when the current project's memory crosses **30 entries** (critical at **45**). `MEMORY.md` truncates after 200 lines, so silently oversized memory degrades Phase 0 echoes — this catches it before quality drops.
 
 **Weekly distill digest (opt-in)** — `scripts/distill-dry-run.py` scans all tiers and produces a markdown digest (cross-project promotion candidates + memory-cap status + tier counts). Install via `./scripts/setup.sh --with-weekly-distill` to register a Monday 09:00 cron that ships the digest to Telegram + archives to `~/.claude/memory/.last-distill-report.md`. **Detection is auto, application stays manual** — open a session and run `/distill-memory` to review + apply. Requires Telegram credentials at `~/.claude/.secrets/tg.env` (chmod 600).
+
+**Lean every-turn payload** — CLAUDE.md is loaded on every prompt, so reference material moves out of it. The four MCP integration sections (Browser, CodeGraph, Context7, Figma) live in `mcp-guides/<name>.md` and are read on-demand by the skills that actually need them. CLAUDE.md keeps a 30-line consolidated stub (trigger map + decision shortcuts + pointers). Result: **CLAUDE.md ≈ 22 KB instead of 39 KB (−43%)**, which translates to roughly 3.5 K tokens saved per cold-start session — pipeline order, decision matrix, save triggers, and trigger keywords are all unchanged.
+
+**Size-budget lints** — `lint-skills.py` warns when CLAUDE.md > 35 KB, any SKILL.md > 25 KB, or a memory entry body > 1.5 KB. The budgets are calibrated to the per-turn loading audit; warnings show up next to frontmatter/link checks so regrowth is caught at edit time instead of months later.
 
 ---
 
