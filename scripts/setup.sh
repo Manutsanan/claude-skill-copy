@@ -11,20 +11,22 @@ set -euo pipefail
 #   4. Install ~/.claude/RTK.md from RTK.template.md (if missing or with --force)
 #   5. Create empty ~/.claude/memory/ + ~/.claude/projects/ if missing
 #   6. Install lint tooling (PostToolUse hook + Python venv)
-#   7. Install chrome-devtools MCP (user scope) — powers debug/ux/audit/fe browser playbooks
-#   8. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
-#   9. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
-#  10. (opt-in) Install Playwright MCP — cross-browser testing (Chromium + Firefox + WebKit)
+#   7. Install playwright-chromium MCP (user scope) — default browser MCP for all skills
+#   8. (opt-in) Install playwright-firefox + playwright-webkit — cross-browser engine testing
+#   9. (opt-in) Install chrome-devtools MCP — Lighthouse / perf trace / memory heap only
+#  10. (opt-in) Install CodeGraph MCP — semantic ripple check for sa/fe/debug/migrate
+#  11. (opt-in) Install Context7 MCP — live library docs for fe/debug/migrate/sa
 #  11. Print next steps + missing-dependency warnings
 #
 # Flags:
 #   --force            Overwrite existing CLAUDE.md / RTK.md without prompting (destructive — back up first)
 #   --skip-link        Skip symlink step (if you already linked manually)
-#   --skip-mcp         Skip chrome-devtools MCP install (if you don't want browser automation)
-#   --skip-deps        Skip auto-install of system dependencies (rg, etc.)
-#   --with-codegraph   Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
-#   --with-context7    Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
-#   --with-playwright  Register Playwright MCP (chromium + firefox + webkit) in ~/.claude.json (opt-in)
+#   --skip-mcp              Skip playwright-chromium MCP install (if you don't want browser automation)
+#   --skip-deps             Skip auto-install of system dependencies (rg, etc.)
+#   --with-playwright       Register playwright-firefox + playwright-webkit (cross-browser, opt-in)
+#   --with-chrome-devtools  Register chrome-devtools MCP (Lighthouse/perf/memory, opt-in)
+#   --with-codegraph        Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
+#   --with-context7         Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -33,18 +35,20 @@ FORCE=0
 SKIP_LINK=0
 SKIP_MCP=0
 SKIP_DEPS=0
+WITH_PLAYWRIGHT=0
+WITH_CHROME_DEVTOOLS=0
 WITH_CODEGRAPH=0
 WITH_CONTEXT7=0
-WITH_PLAYWRIGHT=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
     --skip-link) SKIP_LINK=1 ;;
     --skip-mcp) SKIP_MCP=1 ;;
     --skip-deps) SKIP_DEPS=1 ;;
+    --with-playwright) WITH_PLAYWRIGHT=1 ;;
+    --with-chrome-devtools) WITH_CHROME_DEVTOOLS=1 ;;
     --with-codegraph) WITH_CODEGRAPH=1 ;;
     --with-context7) WITH_CONTEXT7=1 ;;
-    --with-playwright) WITH_PLAYWRIGHT=1 ;;
     -h|--help)
       sed -n '3,26p' "$0"
       exit 0
@@ -164,37 +168,13 @@ else
     MISSING_SOFT_DEPS+=("jq (required for lint tooling — PostToolUse hook registration)")
   fi
 
-  # Node.js / npx — needed for chrome-devtools MCP + per-project work
+  # Node.js / npx — needed for playwright-chromium MCP + per-project work
   if command -v npx &>/dev/null; then
     ok "Node.js + npx found: $(node --version 2>/dev/null || echo "node version unknown")"
   else
-    warn "Node.js / npx missing — chrome-devtools MCP install will fail"
+    warn "Node.js / npx missing — playwright-chromium MCP install will fail"
     echo "      install Node 18+ from https://nodejs.org or via $PM"
-    MISSING_SOFT_DEPS+=("Node.js + npx (required for chrome-devtools MCP and JS projects)")
-  fi
-
-  # Chrome / Chromium — warn only (platform-specific, heavyweight)
-  CHROME_FOUND=0
-  CHROME_CANDIDATES=(
-    "google-chrome"
-    "chromium"
-    "chromium-browser"
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-    "/Applications/Chromium.app/Contents/MacOS/Chromium"
-  )
-  for chrome_bin in "${CHROME_CANDIDATES[@]}"; do
-    if command -v "$chrome_bin" &>/dev/null || [ -x "$chrome_bin" ]; then
-      CHROME_FOUND=1
-      break
-    fi
-  done
-  if [ "$CHROME_FOUND" -eq 1 ]; then
-    ok "Chrome/Chromium binary detected"
-  else
-    warn "Chrome/Chromium not detected — chrome-devtools MCP needs it to run"
-    echo "      macOS: download from https://www.google.com/chrome/"
-    echo "      Linux: $PM install chromium (or google-chrome-stable)"
-    MISSING_SOFT_DEPS+=("Chrome/Chromium browser (required for chrome-devtools MCP playbooks)")
+    MISSING_SOFT_DEPS+=("Node.js + npx (required for playwright-chromium MCP and JS projects)")
   fi
 fi
 
@@ -353,36 +333,50 @@ else
   fi
 fi
 
-# ---------- 6. chrome-devtools MCP ----------
+# ---------- 6. playwright-chromium MCP (default browser) ----------
 #
-# Powers the browser-automation playbooks in debug/ux/audit/fe skills.
-# Without this, those skills fall back to "ask user for screenshot" path —
-# functional but ~35-55% less effective per quality lift estimates.
+# Default browser MCP — powers navigate/click/screenshot/console/network/evaluate
+# across all skills (verify/debug/run/ux/fe/security-review).
+# chrome-devtools is reserved for Lighthouse / perf trace / memory heap only.
 #
+# Also installs the browser binary (chrome-for-testing) via playwright's installer.
 # Installs at user scope so it's available across all projects.
 # Idempotent — skip if already registered.
 
 if [ "$SKIP_MCP" -eq 1 ]; then
-  note "Skipping chrome-devtools MCP install (--skip-mcp)"
+  note "Skipping playwright-chromium MCP install (--skip-mcp)"
 else
-  note "Installing chrome-devtools MCP (browser automation for debug/ux/audit/fe)"
+  note "Installing playwright-chromium MCP (default browser for all skills)"
 
-  if ! command -v claude &>/dev/null; then
-    warn "claude CLI not found — install manually later:"
-    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
-  elif ! command -v npx &>/dev/null; then
+  CLAUDE_JSON="$HOME/.claude.json"
+
+  if ! command -v npx &>/dev/null; then
     warn "npx not found (need Node.js) — install Node then run:"
-    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
-  elif claude mcp list 2>/dev/null | grep -qi "chrome-devtools"; then
-    ok "chrome-devtools MCP already registered"
+    echo '      Add to ~/.claude.json mcpServers: "playwright-chromium": {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}'
+  elif [ ! -f "$CLAUDE_JSON" ]; then
+    warn "~/.claude.json not found — add manually under mcpServers:"
+    echo '      "playwright-chromium": {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}'
+  elif ! command -v jq &>/dev/null; then
+    warn "jq not found — add manually to ~/.claude.json under mcpServers:"
+    echo '      "playwright-chromium": {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}'
+  elif jq -e '.mcpServers["playwright-chromium"]' "$CLAUDE_JSON" >/dev/null 2>&1; then
+    ok "playwright-chromium MCP already registered"
   else
-    if claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>&1 | tail -5; then
-      ok "chrome-devtools MCP installed at user scope"
-      echo "      First call will download chrome-devtools-mcp via npx (one-time, ~10MB)"
-      echo "      Requires Chrome/Chromium installed on this machine"
+    cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq '.mcpServers //= {} | .mcpServers["playwright-chromium"] = {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}' \
+      "$CLAUDE_JSON" > "$tmp" && mv "$tmp" "$CLAUDE_JSON"
+    ok "playwright-chromium registered in ~/.claude.json"
+  fi
+
+  # Install browser binary (idempotent — playwright skips if already present)
+  if command -v npx &>/dev/null; then
+    note "Installing chrome-for-testing browser binary (playwright-chromium needs it)"
+    if npx @playwright/mcp install-browser chrome-for-testing 2>&1 | tail -3; then
+      ok "chrome-for-testing browser binary ready"
     else
-      warn "chrome-devtools MCP install failed — try manually:"
-      echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+      warn "Browser binary install failed — run manually:"
+      echo "      npx @playwright/mcp install-browser chrome-for-testing"
     fi
   fi
 fi
@@ -490,30 +484,26 @@ else
   fi
 fi
 
-# ---------- 9. Playwright MCP (opt-in) ----------
+# ---------- 9. playwright-firefox + playwright-webkit (opt-in, cross-browser) ----------
 #
-# Adds real cross-browser testing to debug/ux/audit/fe skills:
-#   debug  — reproduce bugs in Firefox/WebKit engine; browser_select_option for form bugs
-#   ux     — cross-browser visual screenshot comparison (Chromium vs Firefox vs WebKit)
+# Adds real cross-browser engine testing beyond the default playwright-chromium:
+#   debug  — reproduce bugs in Firefox/WebKit; browser_select_option for form bugs
+#   ux     — cross-browser visual screenshot comparison
 #   audit  — cross-browser a11y: ARIA + keyboard nav differences per engine
-#   fe     — cross-browser hydration/reactivity verify (when chrome-devtools passes but issue is engine-specific)
+#   fe     — cross-browser hydration/reactivity verify when issue is engine-specific
 #
-# Registers 3 separate MCP entries in ~/.claude.json — one per engine:
-#   playwright-chromium, playwright-firefox, playwright-webkit
-#
+# playwright-chromium is already installed by step 6 — this step adds firefox + webkit only.
 # Requires: Node.js + npx (already checked in step 0)
-# Each engine is independent — can use one, two, or all three
 
 if [ "$WITH_PLAYWRIGHT" -eq 0 ]; then
-  note "Playwright MCP skipped (add --with-playwright to install)"
+  note "Playwright cross-browser MCP skipped (add --with-playwright to install firefox + webkit)"
 else
-  note "Installing Playwright MCP (cross-browser: chromium + firefox + webkit)"
+  note "Installing playwright-firefox + playwright-webkit (cross-browser engines)"
 
   CLAUDE_JSON="$HOME/.claude.json"
 
   if [ ! -f "$CLAUDE_JSON" ]; then
     warn "~/.claude.json not found — add manually under mcpServers:"
-    echo '      "playwright-chromium": {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","chromium"]}'
     echo '      "playwright-firefox":  {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","firefox"]}'
     echo '      "playwright-webkit":   {"type":"stdio","command":"npx","args":["@playwright/mcp@latest","--browser","webkit"]}'
   elif ! command -v jq &>/dev/null; then
@@ -524,7 +514,7 @@ else
     cp "$CLAUDE_JSON" "$CLAUDE_JSON.bak.$(date +%Y-%m-%d-%H%M%S)"
     tmp="$(mktemp)"
 
-    for BROWSER in chromium firefox webkit; do
+    for BROWSER in firefox webkit; do
       KEY="playwright-$BROWSER"
       if jq -e ".mcpServers[\"$KEY\"]" "$CLAUDE_JSON" >/dev/null 2>&1; then
         ok "$KEY MCP already registered in ~/.claude.json"
@@ -541,9 +531,40 @@ else
       fi
     done
 
-    echo "      Restart Claude Code to pick up the 3 new Playwright MCP servers"
-    echo "      Each engine runs independently — use playwright-firefox / playwright-webkit for cross-browser bugs"
+    echo "      Restart Claude Code to pick up the new Playwright MCP servers"
+    echo "      Each engine is independent — use playwright-firefox / playwright-webkit for cross-browser bugs"
     echo "      Playwright will download required browser binaries on first run via npx"
+  fi
+fi
+
+# ---------- 10. chrome-devtools MCP (opt-in — Lighthouse / perf trace / memory heap) ----------
+#
+# Reserve for: Lighthouse score, performance traces (Web Vitals), memory heap snapshots.
+# All other browser tasks use playwright-chromium (already installed in step 6).
+# Requires: Chrome/Chromium installed on this machine (not bundled like playwright).
+
+if [ "$WITH_CHROME_DEVTOOLS" -eq 0 ]; then
+  note "chrome-devtools MCP skipped (add --with-chrome-devtools to install — needed only for Lighthouse/perf/memory)"
+else
+  note "Installing chrome-devtools MCP (Lighthouse / perf trace / memory heap)"
+
+  if ! command -v claude &>/dev/null; then
+    warn "claude CLI not found — install manually later:"
+    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+  elif ! command -v npx &>/dev/null; then
+    warn "npx not found (need Node.js) — install Node then run:"
+    echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+  elif claude mcp list 2>/dev/null | grep -qi "chrome-devtools"; then
+    ok "chrome-devtools MCP already registered"
+  else
+    if claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest 2>&1 | tail -5; then
+      ok "chrome-devtools MCP installed at user scope"
+      echo "      Requires Chrome/Chromium installed on this machine"
+      echo "      Use only for: lighthouse_audit, performance_start_trace, take_memory_snapshot"
+    else
+      warn "chrome-devtools MCP install failed — try manually:"
+      echo "      claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest"
+    fi
   fi
 fi
 
@@ -568,10 +589,15 @@ Next steps:
        ./scripts/setup.sh --with-context7
      Queries real docs for Nuxt UI / Valibot / Pinia instead of using training data.
 
-  5. (Optional) Install Playwright MCP for cross-browser testing:
+  5. (Optional) Install playwright-firefox + webkit for cross-browser testing:
        ./scripts/setup.sh --with-playwright
-     Registers playwright-chromium, playwright-firefox, playwright-webkit in ~/.claude.json
+     Registers playwright-firefox, playwright-webkit in ~/.claude.json
      Enables: cross-browser reproduce in debug, visual diff in ux, a11y verify in audit.
+     (playwright-chromium is already installed by default in step 6)
+
+  6. (Optional) Install chrome-devtools MCP for Lighthouse / perf trace / memory heap:
+       ./scripts/setup.sh --with-chrome-devtools
+     Use only when you need: lighthouse score, Web Vitals trace, memory heap snapshot.
 
   6. Memory starts empty — that's expected. Lessons accumulate as you work.
      Read CLAUDE.md sections "Save triggers" + "Graduation pipeline" for how it grows.
