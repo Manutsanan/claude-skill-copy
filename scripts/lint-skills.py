@@ -157,7 +157,13 @@ def lint_memory_dir(dir_path: Path) -> None:
     if not dir_path.exists():
         return
 
-    entries = [md for md in sorted(dir_path.glob("*.md")) if md.name != "MEMORY.md"]
+    # Skip dotfiles — those are runtime artifacts (.last-distill-report.md,
+    # .cross-project-candidates.md, etc.), not memory entries.
+    entries = [
+        md
+        for md in sorted(dir_path.glob("*.md"))
+        if md.name != "MEMORY.md" and not md.name.startswith(".")
+    ]
     if not entries:
         return
 
