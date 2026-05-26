@@ -89,7 +89,9 @@ Then pipelines `sa → ux → fe → verify` automatically.
 | [`debug`](skills/engineering/debug/SKILL.md) | error / พัง / ไม่ทำงาน / strange behavior | Mantra → hypotheses → falsify → root cause → ripple |
 | [`migrate`](skills/engineering/migrate/SKILL.md) | migrate / แปลง / ทั้ง project | Pattern codemod across many files — never single-file |
 | [`audit`](skills/engineering/audit/SKILL.md) | audit / health check / ตรวจ project | Lighthouse · dead code · bundle · dep security |
-| [`verify`](skills/misc/verify/SKILL.md) | ทดสอบ / confirm / verify | Playwright browser test — not just `tsc` |
+| [`verify`](skills/misc/verify/SKILL.md) | ทดสอบ / confirm / verify | Playwright golden-path + edge cases — not just `tsc` |
+| [`run`](skills/misc/run/SKILL.md) | run / เปิด app / ดูหน้าตา / screenshot | Launch dev server + screenshot current state |
+| [`security-review`](skills/misc/security-review/SKILL.md) | ตรวจ security / audit ก่อน merge / OWASP | OWASP Top 10 audit on branch diff — auth · IDOR · injection · secrets |
 | [`pr`](skills/misc/pr/SKILL.md) | เขียน PR / สร้าง PR | Auto-draft PR description from git diff |
 | [`review`](skills/misc/review/SKILL.md) | review / code review / ดู PR / ตรวจโค้ด | Code review — bugs · anti-patterns · type safety · logic errors |
 | [`simplify`](skills/misc/simplify/SKILL.md) | simplify / ลด code / clean up / duplication | Dead code · duplication · over-complex logic — after fe/debug only |
@@ -213,17 +215,19 @@ skills/
 │   ├── migrate/        # Bulk Pattern Transformation
 │   └── audit/          # Project Health (Lighthouse · dead code · deps)
 └── misc/
-    ├── verify/         # Playwright Browser Verification
-    ├── run/            # Dev Server + Screenshot
-    ├── pr/             # PR Description Writer
-    ├── review/         # Code Review — bugs · anti-patterns · type safety
-    ├── simplify/       # Reduce Code Surface — dead code · duplication
-    ├── distill-memory/ # Memory Distillation — prune · promote · audit
-    └── _template/      # Skeleton for new skills
+    ├── verify/          # Playwright Browser Verification — golden-path + edge cases
+    ├── run/             # Dev Server + Screenshot — observe, don't fix
+    ├── security-review/ # OWASP Branch Audit — diff-scoped, before merge
+    ├── pr/              # PR Description Writer
+    ├── review/          # Code Review — bugs · anti-patterns · type safety
+    ├── simplify/        # Reduce Code Surface — dead code · duplication
+    ├── distill-memory/  # Memory Distillation — prune · promote · audit
+    └── _template/       # Skeleton for new skills
 hooks/
     ├── lint-on-edit.sh          # PostToolUse → run linter after every edit
     ├── check-cross-project.py   # SessionStart (async) → flag memory slugs in ≥2 projects
-    └── post-compact.py          # PostCompact → show in-progress checkpoints as systemMessage
+    ├── post-compact.py          # PostCompact → systemMessage + write sentinel
+    └── inject-checkpoint.py     # UserPromptSubmit → inject checkpoint as additionalContext (once per compaction)
 ```
 
 ---
