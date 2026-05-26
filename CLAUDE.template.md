@@ -22,6 +22,13 @@ Load in order, 2 tiers (global → project):
 - Project-specific patterns, history, findings, constraints
 - If missing → skip + note "no project memory"
 
+**Stale memory guard (Fix 2 — mandatory before applying any memory entry):**
+Any memory entry that names a specific file path, function name, flag, or component → **verify existence before recommending**:
+- Names a file path → `Read` the file (confirm it exists)
+- Names a function/symbol → `rg "<name>"` (confirm it's still in use)
+- Names a feature flag / env var → check current config
+If not found → mark as stale, do not recommend it, update or delete the memory entry
+
 ### Phase checkpoint — `~/.claude/projects/<id>/memory/project_phase_checkpoint_*.md`
 - After loading project memory → scan for files named `project_phase_checkpoint_*.md` in the same folder
 - If a checkpoint with `status: in_progress` is found → echo it to the user + ask whether to **resume** (load artifact from checkpoint) or **start fresh** (mark checkpoint as `abandoned`)
@@ -53,6 +60,9 @@ Refer to the "Quick decision matrix" table in the Skill orchestration section be
 - Invoking a skill → that skill will run **Phase 0.5** itself (loads `~/.claude/skills/<skill>/learnings.md`)
 - **Soft confirmation (mandatory on invoke):** first line of response must be `→ invoking \`[skill]\` ([reason ≤5 words])` — 1 line only, no header, no bold, no extra formatting
 
+**Pipeline task tracking (Fix 1 — mandatory for multi-step pipelines):**
+If selected pipeline has ≥ 2 steps (sa→ux, ux→fe, sa→ux→fe, sa→fe, etc.) → **immediately create tasks** using `TaskCreate` with each step as a separate task before starting Phase 1. Mark `in_progress` when starting a step, `completed` when its artifact is saved. This replaces relying on memory alone — tasks survive context compression.
+
 ## 4. Universal save triggers (mandatory — force save mid-turn)
 
 Save memory **immediately** — do not wait for the user to ask, do not wait for session end — when any of these events occur:
@@ -70,6 +80,7 @@ Save memory **immediately** — do not wait for the user to ask, do not wait for
    - **frontmatter:** `phase: sa|ux|fe` + `status: in_progress` → change to `complete` when handoff is done
    - **content:** primary artifact the next phase needs — spec for ux, design plan for fe, implementation summary for verify
 10. **Skill invoke corrected by user** ("ไม่ใช่ sa", "ควรเป็น fe", "debug ไม่ใช่ fe") → save `feedback_skill_trigger_*` to global memory immediately with: phrase used + wrong skill + correct skill; distill pipeline consolidates into `skill_trigger_vocabulary.md`
+11. **After full pipeline completes** (sa→ux→fe, sa→fe, ux→fe — all steps done, verify passed) → suggest to user at end of turn (1 line only): `Tip: run \`/distill-memory\` to promote new patterns to skill learnings.` — say this once per pipeline, not per turn
 
 ### Save where?
 
@@ -119,6 +130,7 @@ All sections below work as one system, not as independent rules.
 | "verify a fix / confirm feature works / test in real app" | `verify` | standalone (after fe/debug) |
 | "run / launch app / open dev server / see screenshot" | `run` | standalone |
 | "simplify / reduce code / find duplication after fixing" | `simplify` | standalone (after fe) |
+| "write PR / draft PR description / create PR / เขียน PR / สร้าง PR / เปิด PR" | `pr` | standalone |
 | "review PR / code review / view PR #X" | `review` | standalone |
 | "security review of current branch / audit before merge" | `security-review` | standalone |
 | "perf audit / a11y audit / lighthouse score" | `audit` | standalone |
@@ -174,6 +186,13 @@ Trigger when:
 - User sends error stack / log / screenshot of console error
 - Must trace to **root cause** not symptom; scan ripple of the same pattern elsewhere
 
+### `pr` — Write & publish GitHub PR descriptions
+
+Trigger when:
+- User mentions: เขียน PR, สร้าง PR, draft PR, เปิด PR, ทำ PR, PR description, write PR, create PR, open PR, draft pull request, submit PR
+- Branch has commits ready to merge and a PR needs to be opened or updated
+- **Do not invoke** when user wants to review an existing PR → use `review` skill
+
 ---
 
 ## Pipeline: `sa → ux → fe → verify`
@@ -201,6 +220,13 @@ Examples:
 - Tell the user clearly where you are yielding and why (1 line)
 - Complete the yielded step before returning to the original skill
 - On returning — apply the yield's result (never act as if the yield didn't happen)
+
+**Checkpoint-before-yield (Fix 5 — mandatory, prevents context loss):**
+Before switching to a yielded skill → save a project memory checkpoint immediately:
+1. Write `project_phase_checkpoint_<current-phase>_YYYY-MM-DD.md` with `status: in_progress`
+2. Body must include: what was completed so far + what the yield needs to resolve + where to resume
+3. Only then announce the yield and switch skill
+On returning from yield → read the checkpoint file to restore context before continuing (do not rely on conversation memory alone — it may have been compressed)
 
 ---
 
@@ -269,6 +295,7 @@ Allowed values for `skill:`
 - `sa` — requirement / spec / security
 - `debug` — bug pattern / root cause / runtime error
 - `migrate` — bulk migration / codemod
+- `pr` — PR description writing / publishing
 - `cross` — applicable to multiple skills (e.g. `feedback_verify_before_claiming_done`)
 
 **Rule:** if the skill tag is omitted → defaults to `cross` (visible to every skill) — but always set it explicitly for proper filtering
@@ -454,7 +481,7 @@ If MCP `chrome-devtools` is offline / dev server isn't running / user disabled M
 ## Skill integration reference
 
 Custom skills with their own chrome-devtools + Playwright sections (read each skill's SKILL.md for specifics):
-- `debug/SKILL.md` — chrome-devtools: reproduce + inspect runtime state; Playwright: cross-browser reproduce + select/back/tabs
+- `debug/SKILL.md` — playwright-chromium: default for all single-browser debugging (console/network/state/interactions); playwright-firefox/webkit: cross-browser engine bugs; chrome-devtools: perf trace + memory heap only
 - `ux/SKILL.md` — chrome-devtools: visual + lighthouse + responsive; Playwright: cross-browser engine screenshot comparison
 - `audit/SKILL.md` — chrome-devtools: lighthouse + perf trace + memory; Playwright: cross-browser a11y behavior (ARIA / keyboard nav)
 - `fe/SKILL.md` — chrome-devtools: reactivity/hydration inspect; Playwright: cross-browser hydration verify

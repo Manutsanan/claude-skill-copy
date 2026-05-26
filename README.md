@@ -121,13 +121,23 @@ sa ──────► ux ──────► fe ──────► verif
 ```
 1. Load global memory       ~/.claude/memory/MEMORY.md
 2. Load project memory      ~/.claude/projects/<id>/memory/MEMORY.md
+   └─ stale guard: any entry naming a file/function → verify still exists before applying
 3. Scan phase checkpoint    → in_progress? ask resume / fresh start
 4. Load skill vocabulary    Thai trigger phrases per skill
 5. Echo top 3-5 relevant entries
 6. Conflict check           → conflicts memory? stop + ask first
 7. Token efficiency gate    → rtk proxy / quality gate
 8. Match intent → pick skill → echo: `→ invoking [skill] (reason)`
+   └─ multi-step pipeline (sa→ux→fe)? → create tasks before starting Phase 1
 ```
+
+**Three enforced fixes that prevent the most common Claude mistakes:**
+
+| Fix | Rule | Prevents |
+|---|---|---|
+| **Fix 1** — Pipeline task tracking | Multi-step pipelines create tasks before starting | Context compression losing pipeline state |
+| **Fix 2** — Stale memory guard | Named file/function in memory → verify it still exists | Recommending deleted code |
+| **Fix 5** — Checkpoint before yield | Before switching skill mid-task → write checkpoint | Context loss when skill yields to another |
 
 ### Memory that survives sessions
 

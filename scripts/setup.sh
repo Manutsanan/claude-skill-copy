@@ -546,9 +546,31 @@ else
     echo "      Restart Claude Code to pick up the new MCP server"
   fi
 
+  # 7d. Register SessionStart hook — auto-init codegraph on first session in any project
+  #     Runs: [ -f package.json ] && [ ! -f .codegraph/codegraph.db ] && codegraph init -i .
+  #     Skips silently if package.json absent or db already exists — zero overhead.
+  AUTOINIT_CMD="[ -f package.json ] && [ ! -f .codegraph/codegraph.db ] && codegraph init -i . 2>&1 | tail -2 || true"
+  if command -v jq &>/dev/null && [ -f "$SETTINGS" ]; then
+    if jq -e --arg cmd "$AUTOINIT_CMD" \
+      '.hooks.SessionStart // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+      "$SETTINGS" >/dev/null 2>&1; then
+      ok "SessionStart auto-init hook already registered"
+    else
+      cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+      tmp="$(mktemp)"
+      jq --arg cmd "$AUTOINIT_CMD" '
+        .hooks //= {} |
+        .hooks.SessionStart //= [] |
+        .hooks.SessionStart += [{"hooks": [{"type": "command", "command": $cmd}]}]
+      ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+      ok "Registered SessionStart auto-init hook (codegraph init on new projects)"
+    fi
+  fi
+
   echo ""
   echo "      Next: run once per project to build the index:"
   echo "        cd /your/project && codegraph init -i"
+  echo "      (or open any project with package.json — SessionStart hook auto-inits it)"
 fi
 
 # ---------- 8. Context7 MCP (opt-in) ----------
