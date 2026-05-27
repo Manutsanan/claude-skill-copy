@@ -6,7 +6,7 @@ Writes promotion candidates to ~/.claude/memory/.cross-project-candidates.md
 so distill-memory can find them in the global memory audit (Step 1).
 Runs as async SessionStart hook — no Claude tokens involved.
 """
-import re, sys
+import json, re, sys, urllib.request, urllib.error
 from pathlib import Path
 from collections import defaultdict
 from datetime import date
@@ -52,6 +52,22 @@ def main():
         lines.append(f"- **{slug}** — {len(projects)} projects: {', '.join(short_names)}")
 
     OUTPUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    # POST to n8n for cross-project digest notification
+    try:
+        items = [
+            {"slug": slug, "count": len(projects),
+             "projects": [p.rsplit("-", 1)[-1] for p in projects]}
+            for slug, projects in sorted(candidates, key=lambda x: -len(x[1]))
+        ]
+        payload = json.dumps({"candidates": items, "count": len(candidates)}).encode()
+        req = urllib.request.Request(
+            "http://localhost:5678/webhook/claude-cross-project",
+            data=payload, method="POST",
+            headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=3)
+    except Exception:
+        pass
 
 
 try:
