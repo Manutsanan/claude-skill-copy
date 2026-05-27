@@ -328,11 +328,11 @@ Sample weekly digest:
 # 📚 Weekly memory distill — 2026-05-27
 
 ## 🟢 Cross-project promotion candidates
-- **select-item-value-empty-string** — 3 projects: boonphone, mcop-web-manage, mcop-web-manage-v2
+- **select-item-value-empty-string** — 3 projects: shop-a, shop-b, shop-admin
 
 ## ⚠️ Memory caps (≥ 30 entries)
-- 🟡 warn **Project-mcop-web-manage** — 36 entries
-- 🟡 warn **Project-mcop-web-manage-v2** — 30 entries
+- 🟡 warn **Project-shop-b** — 36 entries
+- 🟡 warn **Project-shop-admin** — 30 entries
 
 ## 📊 Tier snapshot
 - Global tier: 15 entries
