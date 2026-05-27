@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create 7 webhook-based n8n workflows (Docker-compatible — no Execute Command nodes)."""
+"""Create 9 webhook-based n8n workflows (Docker-compatible — no Execute Command nodes)."""
 import json, os, uuid, urllib.request, urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -559,4 +559,61 @@ conn(c8, "WH POST",     "Write State")
 conn(c8, "Read State",  "Respond")
 create_workflow("Claude — State Store", n8, c8)
 
-print("\n✅ All 8 workflows created and activated.")
+# ════════════════════════════════════════════════════════════════════════════════
+# [9] Vocab Tracker  /webhook/claude-vocab-correction
+# Host sends: {phrase, correct_skill, wrong_skill, auto_applied}
+# Accumulates corrections in staticData; Telegrams on recurring mismatch (≥2×)
+# ════════════════════════════════════════════════════════════════════════════════
+print("\n[9] Vocab Tracker")
+
+js9 = r"""
+const sd   = $getWorkflowStaticData('global');
+const body = $input.first().json.body || $input.first().json;
+
+const phrase  = (body.phrase        || '(unknown)').toString().trim();
+const correct = (body.correct_skill || '?').toString().trim();
+const wrong   = (body.wrong_skill   || '?').toString().trim();
+const applied = body.auto_applied !== false;
+
+if (!sd.corrections) sd.corrections = [];
+
+const existing = sd.corrections.find(c => c.phrase === phrase && c.correct === correct);
+const now = new Date().toISOString();
+if (existing) {
+  existing.count   = (existing.count || 1) + 1;
+  existing.last_ts = now;
+} else {
+  sd.corrections.push({ phrase, correct, wrong, count: 1, applied, first_ts: now, last_ts: now });
+}
+if (sd.corrections.length > 200) sd.corrections = sd.corrections.slice(-200);
+
+const entry      = existing || sd.corrections[sd.corrections.length - 1];
+const isRecurring = (entry.count || 1) >= 2;
+const appliedTag  = applied ? ' (auto-applied ✅)' : ' (parse failed — manual update needed)';
+
+const message = isRecurring
+  ? `🔁 <b>Recurring vocab mismatch</b>\n`
+    + `"<code>${phrase}</code>" corrected ${entry.count}× → <code>${correct}</code>`
+    + (wrong && wrong !== '?' ? ` (was <code>${wrong}</code>)` : '')
+    + appliedTag
+  : '';
+
+return [{ json: { phrase, correct, wrong, applied, count: entry.count, isRecurring, message } }];
+"""
+
+n9 = [{"id": uid(), "name": "WH Vocab", "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2, "position": [240, 300],
+        "parameters": {"httpMethod": "POST", "path": "claude-vocab-correction",
+                       "responseMode": "onReceived", "options": {}}},
+      n_code("Track Correction", [460, 300], js9),
+      n_if("Recurring?", [680, 300], "={{ $json.isRecurring }}"),
+      n_telegram("Telegram Alert", [900, 200]),
+      n_noop("Silent", [900, 420])]
+c9 = {}
+conn(c9, n9[0]["name"], n9[1]["name"])
+conn(c9, n9[1]["name"], n9[2]["name"])
+conn(c9, n9[2]["name"], n9[3]["name"], out=0)
+conn(c9, n9[2]["name"], n9[4]["name"], out=1)
+create_workflow("Claude — Vocab Tracker", n9, c9)
+
+print("\n✅ All 9 workflows created and activated.")
