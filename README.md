@@ -75,7 +75,7 @@ Default `./scripts/setup.sh` ติดตั้งแค่ core (skills + memor
 | `--with-playwright` | Register playwright-firefox + playwright-webkit | ต้อง test cross-browser engine (Safari/Firefox) |
 | `--with-chrome-devtools` | Register chrome-devtools MCP | ใช้ Lighthouse / perf trace / memory heap |
 | `--with-weekly-distill` | ลง cron Mon 09:00 + Telegram digest | อยาก auto-detect promotion candidates รายสัปดาห์ (ต้องมี `~/.claude/.secrets/tg.env`) |
-| `--with-n8n` | ติดตั้ง Docker (ถ้าไม่มี) + start n8n container + deploy hooks + load launchd agents + สร้าง account/API key + activate 8 workflows อัตโนมัติ | ต้องการ n8n automation layer — ใส่ `N8N_EMAIL` + `N8N_PASSWORD` ใน `~/.claude/.secrets/n8n.env` ก่อนรัน (setup.sh จะรอถ้าค่ายัง placeholder) |
+| `--with-n8n` | ติดตั้ง Docker (ถ้าไม่มี) + start n8n container + deploy hooks + load launchd agents + สร้าง account/API key + activate 9 workflows อัตโนมัติ | ต้องการ n8n automation layer — ใส่ `N8N_EMAIL` + `N8N_PASSWORD` ใน `~/.claude/.secrets/n8n.env` ก่อนรัน (setup.sh จะรอถ้าค่ายัง placeholder) |
 
 Flags ที่ใช้สลับ default:
 - `--force` — overwrite `CLAUDE.md` / `RTK.md` ที่มีอยู่ (destructive)
@@ -274,6 +274,7 @@ hooks/
     ├── n8n-notify.sh            # Stop (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → /webhook/claude-stop + /webhook/claude-memory + /webhook/claude-state-store
     ├── n8n-prefetch.sh          # UserPromptSubmit → query n8n state store once per (project × reboot); inject pipeline state / memory alerts / followups as additionalContext
     ├── git-init-check.sh        # PostToolUse (matcher=Bash) → reads stdin JSON to detect actual `git init`; emits .gitignore reminder only when needed (no false positives on complex commands)
+    ├── skill-vocab-sync.py      # PostToolUse (async, matcher=Write|Edit) → detects feedback_skill_trigger_* saves; parses phrase/correct/wrong; appends to skill_trigger_vocabulary.md immediately; POSTs to n8n /webhook/claude-vocab-correction for tracking + recurring-mismatch alerts
     ├── quality-gate.sh          # Stop (async) → type-check Vue/Nuxt/TS with debounce (skips if no .ts/.vue newer than last-run marker); routes through n8n /webhook/claude-typecheck for trend tracking (direct Telegram fallback)
     ├── n8n-followups-check.sh   # [launchd daily 09:00] reads FOLLOWUPS.md → POST /webhook/claude-followups
     ├── n8n-weekly-report.sh     # [launchd Mon 09:00] aggregates skill JSONL logs → POST /webhook/claude-weekly
@@ -295,7 +296,7 @@ scripts/
     ├── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
     ├── skill-report.py          # Analytics over ~/.claude/logs/ — invokes per skill, top phrases, silent skills
     ├── n8n-setup-account.py     # Playwright headless: create n8n owner account + API key → writes N8N_API_KEY to n8n.env (auto-called by setup.sh --with-n8n)
-    └── create-n8n-workflows.py  # Create + activate all 8 n8n webhook workflows via API (auto-called by setup.sh --with-n8n)
+    └── create-n8n-workflows.py  # Create + activate all 9 n8n webhook workflows via API (auto-called by setup.sh --with-n8n)
 mcp-guides/
     ├── browser.md               # Browser MCP (playwright-chromium default + chrome-devtools for Lighthouse/perf/memory)
     ├── codegraph.md             # CodeGraph MCP — semantic ripple/call-path/impact
@@ -386,7 +387,7 @@ The logging hooks exit 0 on failure (so they never block your workflow), but the
 
 ### Honest limits
 
-- **Override detection** (user says "wrong skill, should be Y") isn't implemented yet — phase 2
+- **Vocab auto-sync** closes the correction loop partially — `skill-vocab-sync.py` applies the phrase immediately; n8n tracks recurring mismatches. Full auto-promotion (moving corrected phrases from project memory to CLAUDE.md) still requires `/distill-memory`
 - **Prompt→invoke correlation** uses a 10-second window in the same session; noisy on multi-turn tasks
 - **First weeks are sparse** — meaningful signal after ~50+ invocations per skill
 - **No realtime alerts** — hook errors surface on *next* SessionStart, not mid-session
@@ -445,7 +446,7 @@ And it gets smarter session after session without manual editing.
 
 **Weekly distill digest (opt-in)** — `scripts/distill-dry-run.py` scans all tiers and produces a markdown digest (cross-project promotion candidates + memory-cap status + tier counts). Install via `./scripts/setup.sh --with-weekly-distill` to register a Monday 09:00 cron that ships the digest to Telegram + archives to `~/.claude/memory/.last-distill-report.md`. **Detection is auto, application stays manual** — open a session and run `/distill-memory` to review + apply. Requires Telegram credentials at `~/.claude/.secrets/tg.env` (chmod 600).
 
-**n8n automation layer** — hooks are stateless (fire-and-forget); n8n is the stateful middleware. 8 webhook-based workflows extend the skill system without touching Claude's context: pipeline phase tracking (sa→ux→fe completion across sessions), type-check trend history (regression detection), memory growth monitoring, FOLLOWUPS.md deadline alerts, weekly skill analytics, repo sync drift detection, cross-project pattern promotion reminders, and a **state store** (GET + POST webhooks sharing `staticData`) that caches pipeline state and memory alerts between sessions — queried by `n8n-prefetch.sh` at session start to inject context before Phase 0 even runs. n8n runs in Docker (`~/.n8n` mounted only) — host scripts do all file reads and push pre-processed payloads via HTTP POST. Telegram remains notification-only and can be removed without affecting skill flow. **Setup is fully automated via `--with-n8n`:** Docker is installed if missing, n8n container is started, and a Playwright headless script (`n8n-setup-account.py`) creates the owner account, generates an API key, and writes it back to `n8n.env` — then `create-n8n-workflows.py` creates and activates all 7 workflows. The only manual step is setting `N8N_EMAIL` + `N8N_PASSWORD` in `~/.claude/.secrets/n8n.env`; setup.sh pauses and waits if they're still at placeholder values.
+**n8n automation layer** — hooks are stateless (fire-and-forget); n8n is the stateful middleware. 9 webhook-based workflows extend the skill system without touching Claude's context: pipeline phase tracking (sa→ux→fe completion across sessions), type-check trend history (regression detection), memory growth monitoring, FOLLOWUPS.md deadline alerts, weekly skill analytics, repo sync drift detection, cross-project pattern promotion reminders, a **state store** (GET + POST webhooks sharing `staticData`) that caches pipeline state and memory alerts between sessions — queried by `n8n-prefetch.sh` at session start to inject context before Phase 0 even runs — and a **vocab tracker** that accumulates skill-trigger corrections and fires a Telegram alert when the same phrase is corrected ≥ 2 times (recurring mismatch signal). n8n runs in Docker (`~/.n8n` mounted only) — host scripts do all file reads and push pre-processed payloads via HTTP POST. Telegram remains notification-only and can be removed without affecting skill flow. **Setup is fully automated via `--with-n8n`:** Docker is installed if missing, n8n container is started, and a Playwright headless script (`n8n-setup-account.py`) creates the owner account, generates an API key, and writes it back to `n8n.env` — then `create-n8n-workflows.py` creates and activates all 7 workflows. The only manual step is setting `N8N_EMAIL` + `N8N_PASSWORD` in `~/.claude/.secrets/n8n.env`; setup.sh pauses and waits if they're still at placeholder values.
 
 **Lean every-turn payload** — CLAUDE.md is loaded on every prompt, so reference material moves out of it. The four MCP integration sections (Browser, CodeGraph, Context7, Figma) live in `mcp-guides/<name>.md` and are read on-demand by the skills that actually need them. CLAUDE.md keeps a 30-line consolidated stub (trigger map + decision shortcuts + pointers). Result: **CLAUDE.md ≈ 22 KB instead of 39 KB (−43%)**, which translates to roughly 3.5 K tokens saved per cold-start session — pipeline order, decision matrix, save triggers, and trigger keywords are all unchanged.
 
