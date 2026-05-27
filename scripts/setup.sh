@@ -869,12 +869,14 @@ fi
 # Requires: Docker (to run n8n container at localhost:5678)
 # n8n runs with only ~/.n8n mounted — host scripts push pre-processed data via HTTP POST.
 #
-# After running this step:
-#   1. Open http://localhost:5678 and create an account (first run only)
-#   2. Go to Settings → API → Create an API key
-#   3. cp .secrets-template/n8n.env.example ~/.claude/.secrets/n8n.env && chmod 600 ~/.claude/.secrets/n8n.env
-#   4. Fill in N8N_API_KEY (+ TELEGRAM_CHAT_ID if using Telegram notifications)
-#   5. Run: python3 ~/.claude/scripts/create-n8n-workflows.py
+# Fully automated when N8N_EMAIL + N8N_PASSWORD are set in ~/.claude/.secrets/n8n.env:
+#   - n8n account creation (first run) / login
+#   - API key creation → written back to n8n.env automatically
+#   - 7 workflows created + activated via create-n8n-workflows.py
+#
+# Manual step only if credentials are still at placeholder values:
+#   1. Edit ~/.claude/.secrets/n8n.env → set N8N_EMAIL + N8N_PASSWORD
+#   2. Re-run: ./scripts/setup.sh --with-n8n
 
 if [ "$WITH_N8N" -eq 0 ]; then
   note "n8n automation layer skipped (add --with-n8n to install)"
@@ -891,15 +893,15 @@ else
       note "Launching Docker Desktop (first-time setup)..."
       open -a Docker
       # Wait up to 60s for docker daemon to become available
-      local i=0
+      docker_wait=0
       while ! docker info &>/dev/null 2>&1; do
-        if [ $i -ge 60 ]; then
+        if [ $docker_wait -ge 60 ]; then
           warn "Docker daemon not ready after 60s — try opening Docker Desktop manually, then re-run: ./scripts/setup.sh --with-n8n"
           WITH_N8N=0
           break
         fi
         sleep 2
-        i=$((i+2))
+        docker_wait=$((docker_wait+2))
       done
       [ "$WITH_N8N" -eq 1 ] && ok "Docker installed and running"
     elif [[ "$(uname)" == "Linux" ]]; then
@@ -1036,40 +1038,100 @@ else
       warn "  n8n-followups-check.sh (daily 09:00), n8n-weekly-report.sh (Mon 09:00), n8n-drift-check.sh (daily 10:00)"
     fi
 
-    # 12f. Copy workflow creation script
-    CREATE_SCRIPT_SRC="$REPO/scripts/create-n8n-workflows.py"
-    CREATE_SCRIPT_DST="$HOME_CLAUDE/scripts/create-n8n-workflows.py"
-    if [ -f "$CREATE_SCRIPT_SRC" ]; then
-      mkdir -p "$HOME_CLAUDE/scripts"
-      if [ -f "$CREATE_SCRIPT_DST" ] && cmp -s "$CREATE_SCRIPT_SRC" "$CREATE_SCRIPT_DST"; then
-        ok "create-n8n-workflows.py already up-to-date"
-      else
-        cp "$CREATE_SCRIPT_SRC" "$CREATE_SCRIPT_DST"
-        chmod +x "$CREATE_SCRIPT_DST"
-        ok "Installed create-n8n-workflows.py"
+    # 12f. Copy workflow scripts
+    mkdir -p "$HOME_CLAUDE/scripts"
+    for SCRIPT in "create-n8n-workflows.py" "n8n-setup-account.py"; do
+      SRC="$REPO/scripts/$SCRIPT"
+      DST="$HOME_CLAUDE/scripts/$SCRIPT"
+      if [ ! -f "$SRC" ]; then
+        warn "$SCRIPT missing in repo scripts/ — skipping"
+        continue
       fi
-    fi
+      if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+        ok "$SCRIPT already up-to-date"
+      else
+        cp "$SRC" "$DST"
+        chmod +x "$DST"
+        ok "Installed $SCRIPT"
+      fi
+    done
 
-    # 12g. Secrets template reminder
+    # 12g. Secrets — copy template if missing
     N8N_SECRETS="$HOME_CLAUDE/.secrets/n8n.env"
-    if [ -f "$N8N_SECRETS" ]; then
-      ok "n8n secrets already at $N8N_SECRETS"
+    mkdir -p "$HOME_CLAUDE/.secrets"
+    if [ ! -f "$N8N_SECRETS" ]; then
+      cp "$REPO/.secrets-template/n8n.env.example" "$N8N_SECRETS"
+      chmod 600 "$N8N_SECRETS"
+      ok "Created $N8N_SECRETS from template — fill in N8N_EMAIL + N8N_PASSWORD"
     else
-      warn "n8n secrets missing — create them:"
-      echo "      cp $REPO/.secrets-template/n8n.env.example $N8N_SECRETS"
-      echo "      chmod 600 $N8N_SECRETS"
-      echo "      \$EDITOR $N8N_SECRETS"
+      ok "n8n secrets already at $N8N_SECRETS"
     fi
 
-    echo ""
-    echo "  n8n next steps:"
-    echo "    1. Open http://localhost:5678 → create account (first run only)"
-    echo "    2. Settings → API → Create an API key (No Expiration)"
-    echo "    3. Fill in: ~/.claude/.secrets/n8n.env"
-    echo "    4. python3 ~/.claude/scripts/create-n8n-workflows.py"
-    echo "       (creates + activates 7 workflows automatically)"
-    echo "    5. Optionally: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to ~/.claude/.secrets/tg.env"
-    echo "       for Telegram notifications from all 7 workflows"
+    # 12h. Auto-configure n8n: account + API key + workflows
+    #
+    # Uses Playwright (headless Chromium) to:
+    #   1. Detect first-run setup vs login page
+    #   2. Create owner account or sign in
+    #   3. Create API key "claude-code" → write N8N_API_KEY to n8n.env
+    #   4. Run create-n8n-workflows.py to create + activate all 7 workflows
+    #
+    # Requires N8N_EMAIL + N8N_PASSWORD to be set in n8n.env.
+    # Skips gracefully if credentials are still at placeholder values.
+
+    N8N_EMAIL_VAL=$(grep -E '^N8N_EMAIL=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+    N8N_PASS_VAL=$(grep -E '^N8N_PASSWORD=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+    N8N_KEY_VAL=$(grep -E '^N8N_API_KEY=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+
+    CREDS_READY=0
+    if [ -n "$N8N_EMAIL_VAL" ] && [ -n "$N8N_PASS_VAL" ] \
+       && [ "$N8N_EMAIL_VAL" != "your-email@example.com" ] \
+       && [ "$N8N_PASS_VAL" != "your-n8n-password-here" ]; then
+      CREDS_READY=1
+    fi
+
+    if [ "$CREDS_READY" -eq 0 ]; then
+      warn "N8N_EMAIL / N8N_PASSWORD still at placeholder — skipping auto-configure"
+      warn "Edit $N8N_SECRETS then re-run: ./scripts/setup.sh --with-n8n"
+    else
+      # Ensure Python playwright is available
+      if ! python3 -c "import playwright" &>/dev/null 2>&1; then
+        note "Installing Python playwright package..."
+        pip3 install playwright 2>&1 | tail -2
+      fi
+      note "Installing Playwright chromium browser (first run may download ~150 MB)..."
+      python3 -m playwright install chromium 2>&1 | tail -3
+
+      # Run account setup + API key creation
+      if [ -z "$N8N_KEY_VAL" ] || [ "$N8N_KEY_VAL" = "your-n8n-api-key-here" ]; then
+        note "Running n8n account setup + API key creation..."
+        if python3 "$HOME_CLAUDE/scripts/n8n-setup-account.py"; then
+          ok "n8n account configured and API key saved"
+        else
+          warn "n8n auto-configure failed — see screenshot at ~/.claude/logs/n8n-setup-error.png"
+          warn "Manual fallback: open http://localhost:5678, create account, copy API key to $N8N_SECRETS"
+        fi
+      else
+        ok "N8N_API_KEY already set — skipping account setup"
+      fi
+
+      # Create workflows (needs valid N8N_API_KEY)
+      N8N_KEY_VAL=$(grep -E '^N8N_API_KEY=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+      if [ -n "$N8N_KEY_VAL" ] && [ "$N8N_KEY_VAL" != "your-n8n-api-key-here" ]; then
+        note "Creating n8n workflows..."
+        if python3 "$HOME_CLAUDE/scripts/create-n8n-workflows.py"; then
+          ok "7 n8n workflows created and activated"
+        else
+          warn "Workflow creation failed — run manually: python3 ~/.claude/scripts/create-n8n-workflows.py"
+        fi
+      else
+        warn "N8N_API_KEY not available — skipping workflow creation"
+        warn "Run manually after setting the key: python3 ~/.claude/scripts/create-n8n-workflows.py"
+      fi
+
+      echo ""
+      echo "  Optional: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to ~/.claude/.secrets/tg.env"
+      echo "  for Telegram notifications from all 7 workflows"
+    fi
   fi
 fi
 
