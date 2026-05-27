@@ -15,3 +15,9 @@ curl -sf -X POST "$N8N_WEBHOOK" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
   --max-time 5 2>/dev/null || true
+
+# POST to state store — feeds upcoming deadlines into pre-fetch cache
+curl -sf -X POST "http://localhost:5678/webhook/claude-state-store" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  --max-time 5 2>/dev/null || true

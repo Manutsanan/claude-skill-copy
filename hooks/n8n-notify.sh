@@ -65,3 +65,9 @@ curl -sf -X POST "http://localhost:5678/webhook/claude-memory" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
   --max-time 5 2>/dev/null || true
+
+# POST to state store — feeds pre-fetch cache for next session
+curl -sf -X POST "http://localhost:5678/webhook/claude-state-store" \
+  -H "Content-Type: application/json" \
+  -d "$PAYLOAD" \
+  --max-time 5 2>/dev/null || true

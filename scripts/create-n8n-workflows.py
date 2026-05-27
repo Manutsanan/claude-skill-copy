@@ -424,4 +424,139 @@ conn(c7, n7[2]["name"], n7[3]["name"], out=0)
 conn(c7, n7[2]["name"], n7[4]["name"], out=1)
 create_workflow("Claude — Cross-Project Pattern Digest", n7, c7)
 
-print("\n✅ All 7 workflows created and activated.")
+# ════════════════════════════════════════════════════════════════════════════════
+# [8] State Store + Pre-fetch Cache
+# GET  /webhook/claude-prefetch?cwd_hash=X  → returns pre-computed session context
+# POST /webhook/claude-state-store          → writes state from n8n-notify.sh / followups
+# ════════════════════════════════════════════════════════════════════════════════
+print("\n[8] State Store + Pre-fetch Cache")
+
+js8_read = r"""
+const sd = $getWorkflowStaticData('global');
+const query = $input.first().json.query || {};
+const cwdHash = query.cwd_hash || '';
+
+const pipeline = sd.pipelines?.[cwdHash] || null;
+const memAlert = sd.memAlert || null;
+const followups = sd.pendingFollowups || null;
+
+const items = [];
+if (pipeline && (pipeline.sa || pipeline.ux || pipeline.fe)) {
+  const sa = pipeline.sa ? '✅' : '⏳';
+  const ux = pipeline.ux ? '✅' : '⏳';
+  const fe = pipeline.fe ? '✅' : '⏳';
+  items.push(`Pipeline: sa ${sa} → ux ${ux} → fe ${fe}`);
+}
+if (memAlert) items.push(memAlert);
+if (followups) items.push(followups);
+
+return [{ json: {
+  has_context: items.length > 0,
+  items,
+  pipeline: pipeline || { sa: false, ux: false, fe: false }
+}}];
+"""
+
+js8_write = r"""
+const sd = $getWorkflowStaticData('global');
+const body = $input.first().json.body || $input.first().json;
+
+const cwdHash   = body.cwd_hash   || '';
+const lastSkill = body.last_skill || '';
+const phases    = body.checkpoint_phases || [];
+const memFiles  = parseInt(body.mem_files  || 0, 10);
+const memBytes  = parseInt(body.mem_bytes  || 0, 10);
+
+// ── pipeline ──────────────────────────────────────────────────────────────────
+if (cwdHash) {
+  if (!sd.pipelines) sd.pipelines = {};
+  const prev = sd.pipelines[cwdHash] || { sa: false, ux: false, fe: false };
+  const upd  = { sa: prev.sa, ux: prev.ux, fe: prev.fe };
+  if (lastSkill === 'sa') upd.sa = true;
+  if (lastSkill === 'ux') upd.ux = true;
+  if (lastSkill === 'fe') upd.fe = true;
+  for (const p of phases) {
+    if (p === 'sa') upd.sa = true;
+    if (p === 'ux') upd.ux = true;
+    if (p === 'fe') upd.fe = true;
+  }
+  if (upd.sa && upd.ux && upd.fe) { delete sd.pipelines[cwdHash]; }
+  else { sd.pipelines[cwdHash] = upd; }
+}
+
+// ── memory alert ──────────────────────────────────────────────────────────────
+if (memBytes > 0 || memFiles > 0) {
+  const kb = memBytes / 1024;
+  if (kb > 500 || memFiles > 45) {
+    sd.memAlert = `Memory: ${memFiles} files, ${kb.toFixed(0)} KB — run /distill-memory`;
+  } else if (memFiles > 30) {
+    sd.memAlert = `Memory: ${memFiles} files — consider /distill-memory`;
+  } else {
+    sd.memAlert = null;
+  }
+}
+
+// ── followups (payload from n8n-followups-check.sh) ──────────────────────────
+if (body.content && body.today) {
+  const content = body.content;
+  const today = new Date(body.today);
+  today.setHours(0, 0, 0, 0);
+  const pats = [
+    /Review target:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g,
+    /next:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g,
+  ];
+  const pending = [];
+  for (const re of pats) {
+    let m;
+    while ((m = re.exec(content)) !== null) {
+      const t = new Date(m[1]);
+      t.setHours(0, 0, 0, 0);
+      const days = Math.round((t - today) / 86400000);
+      if (days < 0 || days > 3) continue;
+      const before = content.substring(Math.max(0, m.index - 300), m.index);
+      const h = before.match(/##\s+\d+\.\s+(.+)/g);
+      const title = h ? h[h.length - 1].replace(/^##\s+\d+\.\s+/, '') : 'Task';
+      pending.push({ title, date: m[1], days });
+    }
+  }
+  if (pending.length > 0) {
+    const lines = pending.map(p => {
+      const w = p.days === 0 ? 'TODAY' : p.days === 1 ? 'tmr' : `${p.days}d`;
+      return `${p.title} (${w})`;
+    });
+    sd.pendingFollowups = `FOLLOWUPS: ${lines.join(', ')}`;
+  } else {
+    sd.pendingFollowups = null;
+  }
+}
+
+return [{ json: { ok: true } }];
+"""
+
+wh_get  = {"id": uid(), "name": "WH GET",  "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2, "position": [240, 200],
+            "parameters": {"httpMethod": "GET", "path": "claude-prefetch",
+                           "responseMode": "responseNode", "options": {}}}
+wh_post = {"id": uid(), "name": "WH POST", "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2, "position": [240, 500],
+            "parameters": {"httpMethod": "POST", "path": "claude-state-store",
+                           "responseMode": "onReceived", "options": {}}}
+code_r  = {"id": uid(), "name": "Read State",  "type": "n8n-nodes-base.code",
+            "typeVersion": 2, "position": [460, 200],
+            "parameters": {"jsCode": js8_read}}
+code_w  = {"id": uid(), "name": "Write State", "type": "n8n-nodes-base.code",
+            "typeVersion": 2, "position": [460, 500],
+            "parameters": {"jsCode": js8_write}}
+respond = {"id": uid(), "name": "Respond",     "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1, "position": [680, 200],
+            "parameters": {"respondWith": "json",
+                           "responseBody": "={{ JSON.stringify($json) }}", "options": {}}}
+
+n8 = [wh_get, wh_post, code_r, code_w, respond]
+c8 = {}
+conn(c8, "WH GET",      "Read State")
+conn(c8, "WH POST",     "Write State")
+conn(c8, "Read State",  "Respond")
+create_workflow("Claude — State Store", n8, c8)
+
+print("\n✅ All 8 workflows created and activated.")
