@@ -2,6 +2,7 @@
 
 <br/>
 
+
 # ⚡ Claude Skill System
 ## Built Exclusively for Frontend Developers
 
@@ -72,6 +73,7 @@ Default `./scripts/setup.sh` ติดตั้งแค่ core (skills + memor
 | `--with-playwright` | Register playwright-firefox + playwright-webkit | ต้อง test cross-browser engine (Safari/Firefox) |
 | `--with-chrome-devtools` | Register chrome-devtools MCP | ใช้ Lighthouse / perf trace / memory heap |
 | `--with-weekly-distill` | ลง cron Mon 09:00 + Telegram digest | อยาก auto-detect promotion candidates รายสัปดาห์ (ต้องมี `~/.claude/.secrets/tg.env`) |
+| `--with-n8n` | load launchd agents สำหรับ 3 scheduled scripts | มี n8n local + ต้องการ 7 automation workflows (ต้อง import workflows จาก n8n หลัง setup) |
 
 Flags ที่ใช้สลับ default:
 - `--force` — overwrite `CLAUDE.md` / `RTK.md` ที่มีอยู่ (destructive)
@@ -267,10 +269,19 @@ hooks/
     ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
     ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
     ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
-    ├── n8n-notify.sh            # Stop (async) → POST session event to n8n webhook (opt-in; set N8N_WEBHOOK_URL env to override)
+    ├── n8n-notify.sh            # Stop (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → /webhook/claude-stop + /webhook/claude-memory
+    ├── quality-gate.sh          # Stop (async) → type-check Vue/Nuxt/TS; routes through n8n /webhook/claude-typecheck for trend tracking (direct Telegram fallback)
+    ├── n8n-followups-check.sh   # [launchd daily 09:00] reads FOLLOWUPS.md → POST /webhook/claude-followups
+    ├── n8n-weekly-report.sh     # [launchd Mon 09:00] aggregates skill JSONL logs → POST /webhook/claude-weekly
+    ├── n8n-drift-check.sh       # [launchd daily 10:00] compares hook checksums local vs repo → POST /webhook/claude-drift
     └── rtk-rewrite.sh           # PreToolUse → rewrite shell commands via RTK for token savings
 .secrets-template/
-    └── tg.env.example           # Copy to ~/.claude/.secrets/tg.env (chmod 600) — never commit real values
+    ├── tg.env.example           # Copy to ~/.claude/.secrets/tg.env (chmod 600) — never commit real values
+    └── n8n.env.example          # Copy to ~/.claude/.secrets/n8n.env (chmod 600) — API key + credentials
+launchd/
+    ├── com.claude.followups-check.plist  # daily 09:00 → n8n-followups-check.sh
+    ├── com.claude.weekly-report.plist    # Mon 09:00 → n8n-weekly-report.sh
+    └── com.claude.drift-check.plist      # daily 10:00 → n8n-drift-check.sh
 scripts/
     ├── setup.sh                 # Bootstrap a fresh machine — see Quickstart flags
     ├── link-skills.sh           # Symlink skills/* → ~/.claude/skills/ (called by setup.sh)
@@ -427,6 +438,8 @@ And it gets smarter session after session without manual editing.
 
 **Weekly distill digest (opt-in)** — `scripts/distill-dry-run.py` scans all tiers and produces a markdown digest (cross-project promotion candidates + memory-cap status + tier counts). Install via `./scripts/setup.sh --with-weekly-distill` to register a Monday 09:00 cron that ships the digest to Telegram + archives to `~/.claude/memory/.last-distill-report.md`. **Detection is auto, application stays manual** — open a session and run `/distill-memory` to review + apply. Requires Telegram credentials at `~/.claude/.secrets/tg.env` (chmod 600).
 
+**n8n automation layer** — hooks are stateless (fire-and-forget); n8n is the stateful middleware. 7 webhook-based workflows extend the skill system without touching Claude's context: pipeline phase tracking (sa→ux→fe completion across sessions), type-check trend history (regression detection), memory growth monitoring, FOLLOWUPS.md deadline alerts, weekly skill analytics, repo sync drift detection, and cross-project pattern promotion reminders. n8n runs in Docker (`~/.n8n` mounted only) — host scripts do all file reads and push pre-processed payloads via HTTP POST. Telegram remains notification-only and can be removed without affecting skill flow.
+
 **Lean every-turn payload** — CLAUDE.md is loaded on every prompt, so reference material moves out of it. The four MCP integration sections (Browser, CodeGraph, Context7, Figma) live in `mcp-guides/<name>.md` and are read on-demand by the skills that actually need them. CLAUDE.md keeps a 30-line consolidated stub (trigger map + decision shortcuts + pointers). Result: **CLAUDE.md ≈ 22 KB instead of 39 KB (−43%)**, which translates to roughly 3.5 K tokens saved per cold-start session — pipeline order, decision matrix, save triggers, and trigger keywords are all unchanged.
 
 **Size-budget lints** — `lint-skills.py` warns when CLAUDE.md > 35 KB, any SKILL.md > 25 KB, or a memory entry body > 1.5 KB. The budgets are calibrated to the per-turn loading audit; warnings show up next to frontmatter/link checks so regrowth is caught at edit time instead of months later.
@@ -437,3 +450,4 @@ And it gets smarter session after session without manual editing.
 
 MIT · Inspired by [9arm-skills](https://github.com/thananon/9arm-skills)  
 PR welcome — new skills must be used ≥ 2 weeks in production + prove they catch something existing skills don't.
+
