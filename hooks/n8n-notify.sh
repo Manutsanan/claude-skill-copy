@@ -12,11 +12,19 @@ if [ -z "$LAST_SKILL" ]; then
   MONTH=$(date +%Y-%m)
   LAST_SKILL=$(tail -1 "$LOG_DIR/skill-invocations-${MONTH}.jsonl" 2>/dev/null | jq -r '.skill // ""' 2>/dev/null || echo "")
 fi
+LAST_SKILL=$(echo "$LAST_SKILL" | tr '[:lower:]' '[:upper:]')
 
 # Enrich: completed checkpoint phases (sa/ux/fe) for current project
 CWD_PATH=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 [ -z "$CWD_PATH" ] && CWD_PATH="$(pwd)"
-CWD_HASH=$(echo -n "$CWD_PATH" | python3 -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:8])" 2>/dev/null || echo "")
+CWD_HASH=$(echo -n "$CWD_PATH" | python3 -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:16])" 2>/dev/null || echo "")
+
+# Debounce: prevent double-send from concurrent sessions (multi-terminal)
+DEBOUNCE="/tmp/.claude-notify-${CWD_HASH}"
+if [ -f "$DEBOUNCE" ]; then exit 0; fi
+touch "$DEBOUNCE" 2>/dev/null
+(sleep 10 && rm -f "$DEBOUNCE") &
+
 PROJECT_MEM="$HOME/.claude/projects/-$(echo "$CWD_PATH" | tr '/' '-' | sed 's/^-//')/memory"
 CHECKPOINT_PHASES="[]"
 if [ -d "$PROJECT_MEM" ]; then
@@ -24,6 +32,7 @@ if [ -d "$PROJECT_MEM" ]; then
     | xargs -I{} basename {} 2>/dev/null \
     | grep -oE 'checkpoint_(sa|ux|fe)' \
     | sed 's/checkpoint_//' \
+    | tr '[:lower:]' '[:upper:]' \
     | sort -u \
     | jq -R . | jq -s . 2>/dev/null || echo "[]")
   CHECKPOINT_PHASES="${PHASES:-[]}"

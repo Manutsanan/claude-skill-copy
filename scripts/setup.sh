@@ -935,12 +935,16 @@ else
     else
       note "Starting n8n Docker container (first run — may take a moment)"
       mkdir -p "$HOME/.n8n"
+      N8N_API_KEY_VAL=$(grep "^N8N_API_KEY=" "$HOME/.claude/.secrets/n8n.env" 2>/dev/null | cut -d= -f2 || echo "")
       docker run -d \
         --name n8n \
         --restart unless-stopped \
         -p 5678:5678 \
         -v "$HOME/.n8n:/home/node/.n8n" \
         -e N8N_SECURE_COOKIE=false \
+        -e N8N_BLOCK_ENV_ACCESS_IN_NODE=false \
+        -e NODE_FUNCTION_ALLOW_BUILTIN=http,https,url,querystring \
+        ${N8N_API_KEY_VAL:+-e N8N_API_KEY="$N8N_API_KEY_VAL"} \
         docker.n8n.io/n8nio/n8n >/dev/null
       ok "n8n container started at http://localhost:5678"
       warn "First run: open http://localhost:5678 and create an owner account before continuing"

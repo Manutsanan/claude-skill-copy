@@ -6,7 +6,7 @@ N8N_BASE="${N8N_WEBHOOK_URL:-http://localhost:5678}"
 
 CWD_PATH="${PWD}"
 CWD_HASH=$(echo -n "$CWD_PATH" | python3 -c \
-  "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:8])" 2>/dev/null)
+  "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:16])" 2>/dev/null)
 [ -z "$CWD_HASH" ] && exit 0
 
 # Fire once per (cwd × boot session)
@@ -24,10 +24,15 @@ HAS=$(echo "$RESPONSE" | python3 -c \
 [ "$HAS" != "1" ] && exit 0
 
 CTX=$(echo "$RESPONSE" | python3 -c "
-import json, sys
+import json, sys, re
 d = json.load(sys.stdin)
 lines = d.get('items', [])
-print('\n'.join(f'• {l}' for l in lines))
+safe = []
+for l in lines[:10]:
+    l = re.sub(r'[\x00-\x1f\x7f]', ' ', str(l)[:200]).strip()
+    if l:
+        safe.append(f'• {l}')
+print('\n'.join(safe)[:500])
 " 2>/dev/null)
 [ -z "$CTX" ] && exit 0
 
