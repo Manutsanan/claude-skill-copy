@@ -51,6 +51,8 @@ never break callers, and never guess at state.
 | Prompt → code immediately | `sa → ux → fe → verify` **enforced** — no skipping |
 | Claude makes up API syntax | **Context7** fetches live Nuxt/Vue/Valibot docs by version |
 | Mistakes repeat across sessions | **Memory tier** promotes lessons from project → global → skill |
+| Forgotten in-progress pipeline | **Stale pipeline reminder** fires at every session start when a prior checkpoint is `in_progress` |
+| Repeated type-check on every turn | **Quality-gate debounce** skips `vue-tsc` unless a source file actually changed since last run |
 
 ---
 
@@ -73,7 +75,7 @@ Default `./scripts/setup.sh` ติดตั้งแค่ core (skills + memor
 | `--with-playwright` | Register playwright-firefox + playwright-webkit | ต้อง test cross-browser engine (Safari/Firefox) |
 | `--with-chrome-devtools` | Register chrome-devtools MCP | ใช้ Lighthouse / perf trace / memory heap |
 | `--with-weekly-distill` | ลง cron Mon 09:00 + Telegram digest | อยาก auto-detect promotion candidates รายสัปดาห์ (ต้องมี `~/.claude/.secrets/tg.env`) |
-| `--with-n8n` | ติดตั้ง Docker (ถ้าไม่มี) + start n8n container + deploy hooks + load launchd agents + สร้าง account/API key + activate 7 workflows อัตโนมัติ | ต้องการ n8n automation layer — ใส่ `N8N_EMAIL` + `N8N_PASSWORD` ใน `~/.claude/.secrets/n8n.env` ก่อนรัน (setup.sh จะรอถ้าค่ายัง placeholder) |
+| `--with-n8n` | ติดตั้ง Docker (ถ้าไม่มี) + start n8n container + deploy hooks + load launchd agents + สร้าง account/API key + activate 8 workflows อัตโนมัติ | ต้องการ n8n automation layer — ใส่ `N8N_EMAIL` + `N8N_PASSWORD` ใน `~/.claude/.secrets/n8n.env` ก่อนรัน (setup.sh จะรอถ้าค่ายัง placeholder) |
 
 Flags ที่ใช้สลับ default:
 - `--force` — overwrite `CLAUDE.md` / `RTK.md` ที่มีอยู่ (destructive)
@@ -260,7 +262,7 @@ skills/
 hooks/
     ├── lint-on-edit.sh          # PostToolUse → run linter after every edit
     ├── check-cross-project.py   # SessionStart (async) → flag memory slugs in ≥2 projects
-    ├── check-memory-size.py     # SessionStart (async) → warn when project memory ≥ 30 entries + surface hook errors (last 24h)
+    ├── check-memory-size.py     # SessionStart (async) → warn when project memory ≥ 30 entries + surface hook errors (last 24h) + stale pipeline reminder + distill idle reminder (time-based, when below WARN threshold but ≥ 14d since last run)
     ├── _checkpoint_lib.py       # Shared scan/render — imported by post-compact + inject-checkpoint
     ├── post-compact.py          # PostCompact → systemMessage + write sentinel
     ├── inject-checkpoint.py     # UserPromptSubmit → inject checkpoint as additionalContext (once per compaction)
@@ -269,8 +271,10 @@ hooks/
     ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
     ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
     ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
-    ├── n8n-notify.sh            # Stop (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → /webhook/claude-stop + /webhook/claude-memory
-    ├── quality-gate.sh          # Stop (async) → type-check Vue/Nuxt/TS; routes through n8n /webhook/claude-typecheck for trend tracking (direct Telegram fallback)
+    ├── n8n-notify.sh            # Stop (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → /webhook/claude-stop + /webhook/claude-memory + /webhook/claude-state-store
+    ├── n8n-prefetch.sh          # UserPromptSubmit → query n8n state store once per (project × reboot); inject pipeline state / memory alerts / followups as additionalContext
+    ├── git-init-check.sh        # PostToolUse (matcher=Bash) → reads stdin JSON to detect actual `git init`; emits .gitignore reminder only when needed (no false positives on complex commands)
+    ├── quality-gate.sh          # Stop (async) → type-check Vue/Nuxt/TS with debounce (skips if no .ts/.vue newer than last-run marker); routes through n8n /webhook/claude-typecheck for trend tracking (direct Telegram fallback)
     ├── n8n-followups-check.sh   # [launchd daily 09:00] reads FOLLOWUPS.md → POST /webhook/claude-followups
     ├── n8n-weekly-report.sh     # [launchd Mon 09:00] aggregates skill JSONL logs → POST /webhook/claude-weekly
     ├── n8n-drift-check.sh       # [launchd daily 10:00] compares hook checksums local vs repo → POST /webhook/claude-drift
@@ -291,7 +295,7 @@ scripts/
     ├── distill-dry-run-notify.sh # Wraps the scanner → splits + sends to Telegram + archives last digest
     ├── skill-report.py          # Analytics over ~/.claude/logs/ — invokes per skill, top phrases, silent skills
     ├── n8n-setup-account.py     # Playwright headless: create n8n owner account + API key → writes N8N_API_KEY to n8n.env (auto-called by setup.sh --with-n8n)
-    └── create-n8n-workflows.py  # Create + activate all 7 n8n webhook workflows via API (auto-called by setup.sh --with-n8n)
+    └── create-n8n-workflows.py  # Create + activate all 8 n8n webhook workflows via API (auto-called by setup.sh --with-n8n)
 mcp-guides/
     ├── browser.md               # Browser MCP (playwright-chromium default + chrome-devtools for Lighthouse/perf/memory)
     ├── codegraph.md             # CodeGraph MCP — semantic ripple/call-path/impact
@@ -314,7 +318,8 @@ Memory grows automatically (8 save triggers in CLAUDE.md). Without pruning it be
 | Mechanism | When | Output |
 |---|---|---|
 | `hooks/check-cross-project.py` | SessionStart (async) | Writes `~/.claude/memory/.cross-project-candidates.md` for slugs in ≥ 2 projects |
-| `hooks/check-memory-size.py` | SessionStart (async) | `systemMessage` when current project ≥ 30 entries (critical at 45) |
+| `hooks/check-memory-size.py` | SessionStart (async) | `systemMessage` when current project ≥ 30 entries (critical at 45); stale pipeline reminder when any `in_progress` checkpoint exists; distill idle suggestion when ≥ 14d since last `/distill-memory` and count is below WARN threshold |
+| `hooks/n8n-prefetch.sh` | UserPromptSubmit (once per session) | Injects pipeline state · memory alerts · pending followups from n8n state store as `additionalContext` |
 | `scripts/distill-dry-run.py` | Mon 09:00 cron (`--with-weekly-distill`) | Telegram digest + archive at `~/.claude/memory/.last-distill-report.md` |
 
 Sample weekly digest:
@@ -436,11 +441,11 @@ And it gets smarter session after session without manual editing.
 
 **Cross-project auto-flag** — `check-cross-project.py` runs at SessionStart (async, zero latency) and scans all project memories for `name:` slugs appearing in ≥ 2 projects. Pre-populates `/distill-memory` promotion candidates so no repeated lesson slips through.
 
-**Memory-cap guardrail** — `check-memory-size.py` runs at SessionStart (async) and emits a `systemMessage` warning when the current project's memory crosses **30 entries** (critical at **45**). `MEMORY.md` truncates after 200 lines, so silently oversized memory degrades Phase 0 echoes — this catches it before quality drops.
+**Memory-cap guardrail + proactive reminders** — `check-memory-size.py` runs at SessionStart (async) and emits `systemMessage` warnings in three cases: (1) current project memory crosses **30 entries** (critical at **45**) — MEMORY.md truncates after 200 lines so oversized memory degrades Phase 0 echoes silently; (2) any `in_progress` phase checkpoint exists from a prior session — surfaces the stale pipeline so you resume instead of restarting; (3) `/distill-memory` hasn't been run in **14 days** and total memory count is above 10 but below the count-based threshold — a time-based nudge that fires before things get noisy, not after.
 
 **Weekly distill digest (opt-in)** — `scripts/distill-dry-run.py` scans all tiers and produces a markdown digest (cross-project promotion candidates + memory-cap status + tier counts). Install via `./scripts/setup.sh --with-weekly-distill` to register a Monday 09:00 cron that ships the digest to Telegram + archives to `~/.claude/memory/.last-distill-report.md`. **Detection is auto, application stays manual** — open a session and run `/distill-memory` to review + apply. Requires Telegram credentials at `~/.claude/.secrets/tg.env` (chmod 600).
 
-**n8n automation layer** — hooks are stateless (fire-and-forget); n8n is the stateful middleware. 7 webhook-based workflows extend the skill system without touching Claude's context: pipeline phase tracking (sa→ux→fe completion across sessions), type-check trend history (regression detection), memory growth monitoring, FOLLOWUPS.md deadline alerts, weekly skill analytics, repo sync drift detection, and cross-project pattern promotion reminders. n8n runs in Docker (`~/.n8n` mounted only) — host scripts do all file reads and push pre-processed payloads via HTTP POST. Telegram remains notification-only and can be removed without affecting skill flow. **Setup is fully automated via `--with-n8n`:** Docker is installed if missing, n8n container is started, and a Playwright headless script (`n8n-setup-account.py`) creates the owner account, generates an API key, and writes it back to `n8n.env` — then `create-n8n-workflows.py` creates and activates all 7 workflows. The only manual step is setting `N8N_EMAIL` + `N8N_PASSWORD` in `~/.claude/.secrets/n8n.env`; setup.sh pauses and waits if they're still at placeholder values.
+**n8n automation layer** — hooks are stateless (fire-and-forget); n8n is the stateful middleware. 8 webhook-based workflows extend the skill system without touching Claude's context: pipeline phase tracking (sa→ux→fe completion across sessions), type-check trend history (regression detection), memory growth monitoring, FOLLOWUPS.md deadline alerts, weekly skill analytics, repo sync drift detection, cross-project pattern promotion reminders, and a **state store** (GET + POST webhooks sharing `staticData`) that caches pipeline state and memory alerts between sessions — queried by `n8n-prefetch.sh` at session start to inject context before Phase 0 even runs. n8n runs in Docker (`~/.n8n` mounted only) — host scripts do all file reads and push pre-processed payloads via HTTP POST. Telegram remains notification-only and can be removed without affecting skill flow. **Setup is fully automated via `--with-n8n`:** Docker is installed if missing, n8n container is started, and a Playwright headless script (`n8n-setup-account.py`) creates the owner account, generates an API key, and writes it back to `n8n.env` — then `create-n8n-workflows.py` creates and activates all 7 workflows. The only manual step is setting `N8N_EMAIL` + `N8N_PASSWORD` in `~/.claude/.secrets/n8n.env`; setup.sh pauses and waits if they're still at placeholder values.
 
 **Lean every-turn payload** — CLAUDE.md is loaded on every prompt, so reference material moves out of it. The four MCP integration sections (Browser, CodeGraph, Context7, Figma) live in `mcp-guides/<name>.md` and are read on-demand by the skills that actually need them. CLAUDE.md keeps a 30-line consolidated stub (trigger map + decision shortcuts + pointers). Result: **CLAUDE.md ≈ 22 KB instead of 39 KB (−43%)**, which translates to roughly 3.5 K tokens saved per cold-start session — pipeline order, decision matrix, save triggers, and trigger keywords are all unchanged.
 
