@@ -21,6 +21,16 @@ RECENT=$(find "$CWD" \( -name "*.ts" -o -name "*.vue" \) \
 [ "$RECENT" -eq 0 ] && exit 0
 
 PROJECT=$(basename "$CWD")
+
+# Debounce: skip if no source file is newer than the last-run marker
+DEBOUNCE_MARKER="/tmp/.claude-typecheck-${PROJECT}"
+if [ -f "$DEBOUNCE_MARKER" ]; then
+    NEWER=$(find "$CWD" \( -name "*.ts" -o -name "*.vue" \) \
+        ! -path "*/node_modules/*" ! -path "*/.nuxt/*" ! -path "*/dist/*" ! -path "*/.output/*" \
+        -newer "$DEBOUNCE_MARKER" 2>/dev/null | head -1)
+    [ -z "$NEWER" ] && exit 0
+fi
+
 cd "$CWD"
 
 # Resolve local binaries (prefer node_modules over global)
@@ -44,7 +54,8 @@ fi
 # Skip if no usable compiler found
 [[ -z "${CMD%% *}" || ! -x "${CMD%% *}" ]] && exit 0
 
-# Run type check
+# Run type check — touch debounce marker so next Stop skips if nothing changed
+touch "$DEBOUNCE_MARKER" 2>/dev/null || true
 OUTPUT=$(bash -c "$CMD" 2>&1) && TS_EXIT=0 || TS_EXIT=$?
 
 ERROR_COUNT=0

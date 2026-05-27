@@ -166,11 +166,7 @@ if (res.data?.length > 0) {
 **Tags:** nuxt-ui, reka-ui, USelect, USelectMenu, runtime-throw
 **Date:** 2026-05-16
 
-**Symptom:** Runtime error: `SelectItem must have a value prop that is not an empty string` on component mount
-**Root cause:** `items` array contains `value: ''` — Reka UI reserves `''` as the sentinel for "no selection"
-**Fix pattern:** Change `value: ''` → `value: null` or use sentinel string `'__ALL__'`
-**Detection:** `rg "value:\s*['\"]['\"]" --type ts --type vue`
-**See also:** [[select-item-value-must-not-be-empty-string]] in `fe/learnings.md` (primary — full detail + migration guide)
+**See primary:** [[select-item-value-must-not-be-empty-string]] in `fe/learnings.md` — full root cause, fix patterns, and migration guide live there
 
 ## multi-tab-reload-loop-on-401
 

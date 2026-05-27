@@ -39,6 +39,20 @@
 
 <!-- newest on top -->
 
+## valibot-shared-schemas-convention
+
+**Tags:** valibot, schema, nuxt, auto-import, shared, project-structure
+**Date:** 2026-05-27 (graduated from mcop-web-manage-v2 + mcop-web-manage + welfate)
+
+**Context:** Valibot schemas duplicated across pages/composables in 3+ Nuxt projects; each project independently converged on a `shared/schemas/` directory pattern
+**Lesson:** In Nuxt projects with Valibot, schemas shared across ≥2 callers belong in `shared/schemas/<domain>/<feature>.ts` (or `shared/types/` for TypeScript types). Nuxt auto-imports everything under `shared/` — no explicit import needed in composables or pages.
+**How to apply:**
+- New schema that is used in only 1 file → define inline; if a second caller appears → extract to `shared/schemas/`
+- Naming: `shared/schemas/<domain>/<feature>.ts` e.g. `shared/schemas/member/memberInfo.ts`
+- TypeScript types inferred from schemas go in `shared/types/<domain>.ts`
+- Canonical examples (mcop-web-manage-v2 PR #3096): `shared/schemas/auth/auth.ts`, `shared/schemas/auth/login.ts`
+- Never duplicate a schema across files — `InferInput` / `InferOutput` from the single shared file is the source of truth
+
 ## http-200-and-content-grep-is-not-visual-verify
 
 **Tags:** verify, pdf, advisor, false-confidence, layout
