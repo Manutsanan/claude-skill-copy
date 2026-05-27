@@ -267,6 +267,7 @@ hooks/
     ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
     ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
     ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
+    ├── n8n-notify.sh            # Stop (async) → POST session event to n8n webhook (opt-in; set N8N_WEBHOOK_URL env to override)
     └── rtk-rewrite.sh           # PreToolUse → rewrite shell commands via RTK for token savings
 .secrets-template/
     └── tg.env.example           # Copy to ~/.claude/.secrets/tg.env (chmod 600) — never commit real values
