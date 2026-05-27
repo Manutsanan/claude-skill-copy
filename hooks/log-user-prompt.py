@@ -5,7 +5,7 @@ Stdin JSON: { session_id, cwd, prompt }
 
 Stored: ~/.claude/logs/prompts-YYYY-MM.jsonl
 - prompt truncated to 200 chars (per privacy decision)
-- cwd hashed (8-char sha256 prefix)
+- cwd hashed (16-char sha256 prefix)
 - skips empty prompts and slash-command meta-prompts (start with '/')
 
 Errors: written to ~/.claude/logs/hook-errors.jsonl, never block (exit 0).
@@ -40,7 +40,7 @@ def redact(text: str) -> str:
 
 
 def cwd_hash(cwd: str) -> str:
-    return hashlib.sha256(cwd.encode()).hexdigest()[:8]
+    return hashlib.sha256(cwd.encode()).hexdigest()[:16]
 
 
 def log_error(err: Exception):
