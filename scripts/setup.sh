@@ -1076,22 +1076,37 @@ else
     #   4. Run create-n8n-workflows.py to create + activate all 7 workflows
     #
     # Requires N8N_EMAIL + N8N_PASSWORD to be set in n8n.env.
-    # Skips gracefully if credentials are still at placeholder values.
+    # Pauses and waits if credentials are still at placeholder values.
 
+    n8n_creds_ready() {
+      local em pass
+      em=$(grep -E '^N8N_EMAIL=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+      pass=$(grep -E '^N8N_PASSWORD=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+      [ -n "$em" ] && [ -n "$pass" ] \
+        && [ "$em" != "your-email@example.com" ] \
+        && [ "$pass" != "your-n8n-password-here" ]
+    }
+
+    if ! n8n_creds_ready; then
+      warn "N8N_EMAIL / N8N_PASSWORD still at placeholder values."
+      echo ""
+      echo "  Open a new terminal and edit the file:"
+      echo "    \$EDITOR $N8N_SECRETS"
+      echo ""
+      echo "  Set N8N_EMAIL and N8N_PASSWORD, save, then come back here."
+      echo ""
+      read -r -p "  Press Enter when done (or Ctrl-C to skip n8n setup)... "
+      echo ""
+    fi
+
+    # Re-read credentials after user edit
     N8N_EMAIL_VAL=$(grep -E '^N8N_EMAIL=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
     N8N_PASS_VAL=$(grep -E '^N8N_PASSWORD=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
     N8N_KEY_VAL=$(grep -E '^N8N_API_KEY=' "$N8N_SECRETS" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
 
-    CREDS_READY=0
-    if [ -n "$N8N_EMAIL_VAL" ] && [ -n "$N8N_PASS_VAL" ] \
-       && [ "$N8N_EMAIL_VAL" != "your-email@example.com" ] \
-       && [ "$N8N_PASS_VAL" != "your-n8n-password-here" ]; then
-      CREDS_READY=1
-    fi
-
-    if [ "$CREDS_READY" -eq 0 ]; then
-      warn "N8N_EMAIL / N8N_PASSWORD still at placeholder — skipping auto-configure"
-      warn "Edit $N8N_SECRETS then re-run: ./scripts/setup.sh --with-n8n"
+    if ! n8n_creds_ready; then
+      warn "Credentials still not set — skipping n8n auto-configure"
+      warn "Re-run ./scripts/setup.sh --with-n8n after filling in $N8N_SECRETS"
     else
       # Ensure Python playwright is available
       if ! python3 -c "import playwright" &>/dev/null 2>&1; then
