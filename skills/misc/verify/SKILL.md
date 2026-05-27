@@ -1,6 +1,7 @@
 ---
 name: verify
 description: Browser-based verification after fe or debug completes. Navigate golden path, interact, screenshot, check console/network as proof. Trigger on Thai: ทดสอบ, confirm, verify, ตรวจสอบ, ดูผลลัพธ์, ลอง run ดู. English: verify, test it, check it works, confirm it runs. Do NOT use for writing code (use fe) or debugging (use debug).
+user-invocable: false
 ---
 
 # verify — Browser Verification

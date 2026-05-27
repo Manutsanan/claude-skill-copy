@@ -29,6 +29,7 @@ set -euo pipefail
 #   --with-codegraph        Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
 #   --with-context7         Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
 #   --with-weekly-distill   Install weekly memory distill cron (Mon 09:00) — opt-in, requires Telegram credentials at ~/.claude/.secrets/tg.env
+#   --with-n8n              Start n8n Docker container + install 5 hook scripts + register Stop hooks + load launchd agents (macOS)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -42,6 +43,7 @@ WITH_CHROME_DEVTOOLS=0
 WITH_CODEGRAPH=0
 WITH_CONTEXT7=0
 WITH_WEEKLY_DISTILL=0
+WITH_N8N=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
@@ -53,6 +55,7 @@ for arg in "$@"; do
     --with-codegraph) WITH_CODEGRAPH=1 ;;
     --with-context7) WITH_CONTEXT7=1 ;;
     --with-weekly-distill) WITH_WEEKLY_DISTILL=1 ;;
+    --with-n8n) WITH_N8N=1 ;;
     -h|--help)
       sed -n '3,26p' "$0"
       exit 0
@@ -850,6 +853,224 @@ if [ "$WITH_WEEKLY_DISTILL" -eq 1 ]; then
   fi
 else
   note "Weekly distill cron skipped (add --with-weekly-distill to enable)"
+fi
+
+# ---------- 12. n8n automation layer (opt-in) ----------
+#
+# Adds 7 webhook-based n8n workflows that extend the skill system:
+#   - Pipeline phase tracker (sa→ux→fe completion across sessions)
+#   - TypeCheck trend history (regression detection)
+#   - Memory growth monitoring
+#   - FOLLOWUPS.md deadline alerts (daily 09:00)
+#   - Weekly skill analytics (Mon 09:00)
+#   - Repo sync drift detection (daily 10:00)
+#   - Cross-project pattern promotion reminders
+#
+# Requires: Docker (to run n8n container at localhost:5678)
+# n8n runs with only ~/.n8n mounted — host scripts push pre-processed data via HTTP POST.
+#
+# After running this step:
+#   1. Open http://localhost:5678 and create an account (first run only)
+#   2. Go to Settings → API → Create an API key
+#   3. cp .secrets-template/n8n.env.example ~/.claude/.secrets/n8n.env && chmod 600 ~/.claude/.secrets/n8n.env
+#   4. Fill in N8N_API_KEY (+ TELEGRAM_CHAT_ID if using Telegram notifications)
+#   5. Run: python3 ~/.claude/scripts/create-n8n-workflows.py
+
+if [ "$WITH_N8N" -eq 0 ]; then
+  note "n8n automation layer skipped (add --with-n8n to install)"
+else
+  note "Installing n8n automation layer (Docker + hooks + launchd agents)"
+
+  # 12a. Check Docker — install if missing
+  if ! command -v docker &>/dev/null; then
+    note "Docker not found — installing Docker..."
+    if [[ "$(uname)" == "Darwin" ]]; then
+      # macOS: use Homebrew (already verified present in Section 1)
+      brew install --cask docker 2>&1 | tail -3
+      # Docker Desktop needs to be launched once before the daemon is ready
+      note "Launching Docker Desktop (first-time setup)..."
+      open -a Docker
+      # Wait up to 60s for docker daemon to become available
+      local i=0
+      while ! docker info &>/dev/null 2>&1; do
+        if [ $i -ge 60 ]; then
+          warn "Docker daemon not ready after 60s — try opening Docker Desktop manually, then re-run: ./scripts/setup.sh --with-n8n"
+          WITH_N8N=0
+          break
+        fi
+        sleep 2
+        i=$((i+2))
+      done
+      [ "$WITH_N8N" -eq 1 ] && ok "Docker installed and running"
+    elif [[ "$(uname)" == "Linux" ]]; then
+      # Linux: official Docker convenience install script
+      curl -fsSL https://get.docker.com | sh
+      sudo systemctl enable --now docker 2>/dev/null || true
+      # Add current user to docker group so we don't need sudo
+      sudo usermod -aG docker "$USER" 2>/dev/null || true
+      if ! docker info &>/dev/null 2>&1; then
+        warn "Docker installed but daemon not ready — you may need to log out/in for group changes, then re-run: ./scripts/setup.sh --with-n8n"
+        WITH_N8N=0
+      else
+        ok "Docker installed and running"
+      fi
+    else
+      warn "Unknown OS — install Docker manually from https://docs.docker.com/get-docker/ then re-run: ./scripts/setup.sh --with-n8n"
+      WITH_N8N=0
+    fi
+  fi
+
+  if [ "$WITH_N8N" -eq 1 ]; then
+    # 12b. Start n8n container if not running
+    N8N_RUNNING=$(docker ps --filter "name=n8n" --filter "status=running" --format "{{.Names}}" 2>/dev/null)
+    N8N_EXISTS=$(docker ps -a --filter "name=n8n" --format "{{.Names}}" 2>/dev/null)
+
+    if [ -n "$N8N_RUNNING" ]; then
+      ok "n8n container already running"
+    elif [ -n "$N8N_EXISTS" ]; then
+      warn "n8n container exists but stopped — starting it"
+      docker start n8n >/dev/null && ok "n8n container started"
+    else
+      note "Starting n8n Docker container (first run — may take a moment)"
+      mkdir -p "$HOME/.n8n"
+      docker run -d \
+        --name n8n \
+        --restart unless-stopped \
+        -p 5678:5678 \
+        -v "$HOME/.n8n:/home/node/.n8n" \
+        -e N8N_SECURE_COOKIE=false \
+        docker.n8n.io/n8nio/n8n >/dev/null
+      ok "n8n container started at http://localhost:5678"
+      warn "First run: open http://localhost:5678 and create an owner account before continuing"
+    fi
+
+    # 12c. Copy hook scripts
+    N8N_HOOKS=(
+      "n8n-notify.sh"
+      "quality-gate.sh"
+      "n8n-followups-check.sh"
+      "n8n-weekly-report.sh"
+      "n8n-drift-check.sh"
+    )
+    mkdir -p "$HOME_CLAUDE/hooks"
+    for FNAME in "${N8N_HOOKS[@]}"; do
+      SRC="$REPO/hooks/$FNAME"
+      DST="$HOME_CLAUDE/hooks/$FNAME"
+      if [ ! -f "$SRC" ]; then
+        warn "$FNAME missing in repo hooks/ — skipping"
+        continue
+      fi
+      if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+        ok "$FNAME already up-to-date"
+      else
+        cp "$SRC" "$DST"
+        chmod +x "$DST"
+        ok "Installed $FNAME"
+      fi
+    done
+
+    # Also install tg-config.sh (sourced by quality-gate.sh)
+    if [ -f "$REPO/hooks/tg-config.sh" ] && [ ! -f "$HOME_CLAUDE/hooks/tg-config.sh" ]; then
+      cp "$REPO/hooks/tg-config.sh" "$HOME_CLAUDE/hooks/tg-config.sh"
+      ok "Installed tg-config.sh"
+    fi
+
+    # 12d. Register Stop hooks (n8n-notify.sh + quality-gate.sh) in settings.json
+    if ! command -v jq &>/dev/null; then
+      warn "jq not found — skip Stop hook registration; add manually to ~/.claude/settings.json"
+    elif [ ! -f "$SETTINGS" ]; then
+      echo '{"hooks":{}}' > "$SETTINGS"
+    fi
+
+    if command -v jq &>/dev/null; then
+      for HOOK_FILE in "n8n-notify.sh" "quality-gate.sh"; do
+        HOOK_CMD="$HOME_CLAUDE/hooks/$HOOK_FILE"
+        ASYNC="true"
+        if jq -e --arg cmd "$HOOK_CMD" \
+          '.hooks.Stop // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+          "$SETTINGS" >/dev/null 2>&1; then
+          ok "Stop hook ($HOOK_FILE) already registered"
+        else
+          cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+          tmp="$(mktemp)"
+          jq --arg cmd "$HOOK_CMD" --argjson async "$ASYNC" '
+            .hooks //= {} |
+            .hooks.Stop //= [] |
+            .hooks.Stop += [{"hooks": [{"type": "command", "command": $cmd, "async": $async}]}]
+          ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+          ok "Registered Stop hook ($HOOK_FILE, async)"
+        fi
+      done
+    fi
+
+    # 12e. Load launchd plists (macOS only)
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      LAUNCHD_DIR="$REPO/launchd"
+      AGENTS_DIR="$HOME/Library/LaunchAgents"
+      mkdir -p "$AGENTS_DIR"
+      PLISTS=(
+        "com.claude.followups-check.plist"
+        "com.claude.weekly-report.plist"
+        "com.claude.drift-check.plist"
+      )
+      for PLIST in "${PLISTS[@]}"; do
+        SRC="$LAUNCHD_DIR/$PLIST"
+        DST="$AGENTS_DIR/$PLIST"
+        if [ ! -f "$SRC" ]; then
+          warn "$PLIST missing in repo launchd/ — skipping"
+          continue
+        fi
+        if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+          ok "$PLIST already up-to-date"
+          launchctl list | grep -q "$(basename "$PLIST" .plist)" && ok "  agent loaded" || {
+            launchctl load "$DST" 2>/dev/null && ok "  agent loaded"
+          }
+        else
+          cp "$SRC" "$DST"
+          launchctl unload "$DST" 2>/dev/null || true
+          launchctl load "$DST" 2>/dev/null && ok "Loaded launchd agent: $PLIST"
+        fi
+      done
+    else
+      warn "launchd is macOS-only — schedule these scripts manually on Linux:"
+      warn "  n8n-followups-check.sh (daily 09:00), n8n-weekly-report.sh (Mon 09:00), n8n-drift-check.sh (daily 10:00)"
+    fi
+
+    # 12f. Copy workflow creation script
+    CREATE_SCRIPT_SRC="$REPO/scripts/create-n8n-workflows.py"
+    CREATE_SCRIPT_DST="$HOME_CLAUDE/scripts/create-n8n-workflows.py"
+    if [ -f "$CREATE_SCRIPT_SRC" ]; then
+      mkdir -p "$HOME_CLAUDE/scripts"
+      if [ -f "$CREATE_SCRIPT_DST" ] && cmp -s "$CREATE_SCRIPT_SRC" "$CREATE_SCRIPT_DST"; then
+        ok "create-n8n-workflows.py already up-to-date"
+      else
+        cp "$CREATE_SCRIPT_SRC" "$CREATE_SCRIPT_DST"
+        chmod +x "$CREATE_SCRIPT_DST"
+        ok "Installed create-n8n-workflows.py"
+      fi
+    fi
+
+    # 12g. Secrets template reminder
+    N8N_SECRETS="$HOME_CLAUDE/.secrets/n8n.env"
+    if [ -f "$N8N_SECRETS" ]; then
+      ok "n8n secrets already at $N8N_SECRETS"
+    else
+      warn "n8n secrets missing — create them:"
+      echo "      cp $REPO/.secrets-template/n8n.env.example $N8N_SECRETS"
+      echo "      chmod 600 $N8N_SECRETS"
+      echo "      \$EDITOR $N8N_SECRETS"
+    fi
+
+    echo ""
+    echo "  n8n next steps:"
+    echo "    1. Open http://localhost:5678 → create account (first run only)"
+    echo "    2. Settings → API → Create an API key (No Expiration)"
+    echo "    3. Fill in: ~/.claude/.secrets/n8n.env"
+    echo "    4. python3 ~/.claude/scripts/create-n8n-workflows.py"
+    echo "       (creates + activates 7 workflows automatically)"
+    echo "    5. Optionally: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to ~/.claude/.secrets/tg.env"
+    echo "       for Telegram notifications from all 7 workflows"
+  fi
 fi
 
 # ---------- Summary ----------

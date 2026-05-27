@@ -1,6 +1,7 @@
 ---
 name: fe
 description: Use when working on frontend code (Nuxt/Vue/React/TypeScript) — writing components, composables, Nuxt pages/layouts/middleware/server routes, state management, reactivity, type-safety, valibot validation, Nuxt UI components; or reviewing existing frontend code for anti-patterns, reactivity bugs, mutation issues, prop drilling, dead code, unclean naming. Trigger on tasks involving component implementation, composable design, state stores (Pinia/Zustand/useState), `ref`/`reactive`/`computed`/`watch`, props/emits, TypeScript generics, valibot schemas, Nuxt UI (UButton, UModal, UForm, ...), route guards, SSR/hydration, performance. Examples: "เขียน composable นี้ให้หน่อย", "review โค้ด component นี้", "state จัดการยังไงดี", "refactor ให้คลีน", "เขียน schema validate", "ทำไม reactivity ไม่ทำงาน", "หา anti-pattern".
+user-invocable: false
 ---
 
 # fe — Frontend code helper

@@ -1,6 +1,7 @@
 ---
 name: security-review
 description: Security audit of the current branch before merging. OWASP Top 10 check on changed files — auth gates, input validation, output encoding, IDOR, secrets, cookies, CORS/CSP. Trigger on Thai: ตรวจ security, security review, audit ก่อน merge, ดู security. English: security review, security audit, OWASP check, audit before merge, check for vulnerabilities. Do NOT use for general code review (use review) or system spec (use sa Mode B).
+user-invocable: false
 ---
 
 # security-review — Branch Security Audit

@@ -1,6 +1,7 @@
 ---
 name: pr
 description: Use when writing, drafting, or publishing a GitHub PR description — concise, modern markdown with icons. Trigger on Thai: เขียน PR / สร้าง PR / draft PR / เปิด PR / ทำ PR / PR description / เขียน pull request and English: write PR / create PR / open PR / PR description / draft pull request / submit PR. Examples "เขียน PR ให้หน่อย", "สร้าง PR", "draft PR description", "open PR for this branch". DO NOT use for reviewing an existing PR (use `review`).
+user-invocable: false
 ---
 
 # pr — Write & publish GitHub PR descriptions

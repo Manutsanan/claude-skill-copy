@@ -1,6 +1,7 @@
 ---
 name: run
 description: Launch dev server and screenshot the current state. Use to visually confirm what the app looks like right now. Trigger on Thai: run app, เปิด app, รัน, ดูหน้าตา, เปิด dev server, screenshot หน้านี้. English: run, launch, open app, show me what it looks like, start dev server, screenshot. Do NOT use for verification after changes (use verify) or debugging (use debug).
+user-invocable: false
 ---
 
 # run — Dev Server + Screenshot

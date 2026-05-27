@@ -1,6 +1,7 @@
 ---
 name: _template
 description: Template สำหรับสร้าง skill ใหม่ — copy ทั้งไฟล์แล้วแก้ section ตามต้องการ ห้ามแก้ structure เพราะ pipeline orchestration พึ่งโครงสร้างนี้
+user-invocable: false
 ---
 
 # {skill-name} — {one-line purpose}

@@ -1,6 +1,7 @@
 ---
 name: migrate
 description: Use for bulk transformations / migrations across many files — converting legacy patterns to new patterns (e.g. native <select> → USelect, inline schemas → shared schemas, class-based components → composition API, deprecated API → new API). Plans the migration in phases, applies in batches, verifies after each batch, recovers from cascading errors. Trigger on Thai keywords migrate/ย้าย/แปลง/refactor ทั้งโปรเจกต์/เปลี่ยน X เป็น Y ทั้งหมด/cleanup ทุกที่ and English keywords migrate/migration/bulk transform/codemod/refactor across files/replace all/convert all. Examples "migrate native select เป็น USelect ทั้งโปรเจกต์", "ย้าย inline schema ไป shared/", "เปลี่ยน v-model:open เป็น defineModel ทุกที่", "refactor service layer ทั้งหมด", "ลบ deprecated API call ทุกจุด". DO NOT use for single-file edits (use `fe` instead) or schema design (use `sa` first).
+user-invocable: false
 ---
 
 # migrate — Bulk transformation orchestrator

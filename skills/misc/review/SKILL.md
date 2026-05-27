@@ -1,6 +1,7 @@
 ---
 name: review
 description: Use for code review or PR review — inspect existing code or an open PR for bugs, anti-patterns, type safety, and logic errors. Trigger on Thai: review, code review, ดู PR, ตรวจโค้ด, review code, ดูโค้ดนี้, PR นี้เป็นยังไง, view PR. English: review, code review, review PR, look at this code, review this PR, PR #X. Do NOT use for writing PR descriptions (use `pr`) or full security audit (use `sa` Mode B).
+user-invocable: false
 ---
 
 # review — Code Review

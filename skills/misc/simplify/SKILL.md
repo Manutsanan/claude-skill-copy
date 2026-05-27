@@ -1,6 +1,7 @@
 ---
 name: simplify
 description: Use after fe or debug completes to reduce code surface — dead code, duplication, over-complex logic. Trigger on Thai: simplify, ลด code, clean up, หา duplication, refactor ให้สั้นลง, เอา code ซ้ำออก, tidy up, ลด complexity. English: simplify, clean up, reduce duplication, remove dead code, tidy. Do NOT invoke for new feature work or bug fixes — use fe/debug for those.
+user-invocable: false
 ---
 
 # simplify — Reduce Code Surface

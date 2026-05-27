@@ -1,6 +1,7 @@
 ---
 name: distill-memory
 description: Guided memory distillation — review memories across all tiers, consolidate duplicates, prune stale entries, and promote lessons up the tier (project → global → skill learnings). Trigger on Thai: distill-memory, จัดการ memory, clean up memory, ทำ memory, prune memory, review memory, ดู memory. English: distill memory, clean memory, review memory, distill, memory audit.
+user-invocable: false
 ---
 
 # distill-memory — Memory Distillation Pipeline

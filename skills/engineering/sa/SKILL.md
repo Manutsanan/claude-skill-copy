@@ -1,6 +1,7 @@
 ---
 name: sa
 description: Use when analyzing requirements before implementation OR auditing security of an existing design/codebase. Two modes — (1) System Analyst — turn fuzzy requests into concrete artifacts: user stories, use cases, acceptance criteria, sequence/flow diagrams, data models (ER), API specs (request/response/error), state transitions, edge-case enumeration; (2) Security Audit — review code, architecture, auth flow, data handling, dependencies, infra config for OWASP top 10, broken auth, IDOR, injection, XSS, SSRF, secret leakage, insecure deserialization, missing rate limiting, weak crypto, unsafe defaults. Trigger on Thai keywords วิเคราะห์ requirement/วิเคราะห์ระบบ/เก็บ requirement/SA/system analyst/use case/user story/flow diagram/sequence diagram/ER diagram/data model/API spec/ออกแบบระบบ/architecture/security/ตรวจ security/audit/ช่องโหว่/auth flow/threat model and English keywords analyze/requirement/spec/use case/user story/acceptance criteria/sequence diagram/flowchart/ERD/data model/API design/threat model/security review/audit/OWASP/vulnerability/IDOR/SSRF/CSRF/XSS/SQLi. Use BEFORE implementing a non-trivial feature (to nail down spec) or AFTER a design/implementation lands (to validate security). Examples "วิเคราะห์ requirement หน้านี้ให้หน่อย", "เขียน use case ของ flow จองคิว", "ออกแบบ data model สำหรับ ticket", "spec API ของ login ให้หน่อย", "ตรวจ security ของ auth middleware", "หา threat ใน flow นี้", "review ช่องโหว่ของหน้า kiosk".
+user-invocable: false
 ---
 
 # sa — System Analyst + Security Audit
