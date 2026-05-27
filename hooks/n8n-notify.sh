@@ -60,8 +60,12 @@ PAYLOAD=$(echo "$INPUT" | jq \
     mem_files: $mem_files,
     mem_bytes: $mem_bytes
   }' 2>/dev/null || \
-  printf '{"cwd":"%s","timestamp":"%s","last_skill":"%s","cwd_hash":"%s","checkpoint_phases":[],"mem_files":0,"mem_bytes":0}' \
-    "$CWD_PATH" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$LAST_SKILL" "$CWD_HASH")
+  jq -n \
+    --arg cwd "$CWD_PATH" \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg last_skill "$LAST_SKILL" \
+    --arg cwd_hash "$CWD_HASH" \
+    '{cwd:$cwd,timestamp:$ts,last_skill:$last_skill,cwd_hash:$cwd_hash,checkpoint_phases:[],mem_files:0,mem_bytes:0}')
 
 # POST to pipeline tracker
 curl -sf -X POST "$N8N_WEBHOOK" \

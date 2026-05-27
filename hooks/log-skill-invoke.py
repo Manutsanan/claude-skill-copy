@@ -19,7 +19,7 @@ HOOK_NAME = "log-skill-invoke"
 
 
 def cwd_hash(cwd: str) -> str:
-    return hashlib.sha256(cwd.encode()).hexdigest()[:8]
+    return hashlib.sha256(cwd.encode()).hexdigest()[:16]
 
 
 def log_error(err: Exception):
