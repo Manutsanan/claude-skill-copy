@@ -1,6 +1,6 @@
 #!/bin/bash
-# Daily: read FOLLOWUPS.md, parse upcoming deadlines, POST to n8n
-N8N_WEBHOOK="http://localhost:5678/webhook/claude-followups"
+# Daily (08:58): read FOLLOWUPS.md, update Data Tables via state store.
+# n8n Schedule Trigger fires at 09:00 and reads followups_text from Data Tables.
 FOLLOWUPS_FILE="$HOME/Project/claude-skill-copy/FOLLOWUPS.md"
 
 [ -f "$FOLLOWUPS_FILE" ] || exit 0
@@ -11,12 +11,7 @@ TODAY=$(date +%Y-%m-%d)
 PAYLOAD=$(jq -n --arg content "$CONTENT" --arg today "$TODAY" \
   '{content: $content, today: $today}')
 
-curl -sf -X POST "$N8N_WEBHOOK" \
-  -H "Content-Type: application/json" \
-  -d "$PAYLOAD" \
-  --max-time 5 2>/dev/null || true
-
-# POST to state store — feeds upcoming deadlines into pre-fetch cache
+# POST to state store — updates followups_text in Data Tables for the schedule trigger
 curl -sf -X POST "http://localhost:5678/webhook/claude-state-store" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Create 10 webhook-based n8n workflows (Docker-compatible — no Execute Command nodes)."""
+"""Create 10 n8n workflows: 9 webhook-based + 1 Error Handler with Error Trigger.
+FOLLOWUPS Reminder has both a Webhook trigger and a Schedule Trigger (daily 09:00 BKK = 02:00 UTC).
+All workflows point settings.errorWorkflow to Claude — Error Handler."""
 import json, os, uuid, urllib.request, urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -26,12 +28,16 @@ def api(method, path, data=None):
     except urllib.error.HTTPError as e:
         raise Exception(f"HTTP {e.code}: {e.read().decode()[:300]}")
 
-def create_workflow(name, nodes, connections):
+ERR_WF_ID = None  # set after Error Handler is created; injected into all other workflow settings
+
+def create_workflow(name, nodes, connections, error_trigger=False):
+    settings = {"executionOrder": "v1"}
+    if not error_trigger and ERR_WF_ID:
+        settings["errorWorkflow"] = ERR_WF_ID
     wf = {"name": name, "nodes": nodes, "connections": connections,
-          "settings": {"executionOrder": "v1"}, "staticData": None}
+          "settings": settings, "staticData": None}
     result = api("POST", "workflows", wf)
     wid = result["id"]
-    # Activate via POST /activate
     try: api("POST", f"workflows/{wid}/activate")
     except: pass
     print(f"  ✓ {name}  id={wid}")
@@ -89,9 +95,59 @@ def n_noop(name, pos):
     return {"id": uid(), "name": name, "type": "n8n-nodes-base.noOp",
             "typeVersion": 1, "position": pos, "parameters": {}}
 
+# ── Create persistent Data Table (shared by [1] FOLLOWUPS, [5] TypeCheck, [8] State Store) ──
+print("\nCreating project_state Data Table...")
+PS_TBL = create_data_table("project_state", [
+    {"name": "cwd_hash",        "type": "string"},
+    {"name": "project_name",    "type": "string"},
+    {"name": "sa",              "type": "boolean"},
+    {"name": "ux",              "type": "boolean"},
+    {"name": "fe",              "type": "boolean"},
+    {"name": "mem_alert",       "type": "string"},
+    {"name": "mem_files",       "type": "number"},
+    {"name": "mem_bytes",       "type": "number"},
+    {"name": "followups_text",  "type": "string"},
+    {"name": "type_check_text", "type": "string"},
+    {"name": "verify_result",   "type": "string"},
+    {"name": "debug_result",    "type": "string"},
+    {"name": "modified_files",  "type": "string"},
+    {"name": "updated_at",      "type": "string"},
+])
+
 # ════════════════════════════════════════════════════════════════════════════════
-# [1] FOLLOWUPS.md Reminder  /webhook/claude-followups
-# Host sends: {content: "...", today: "YYYY-MM-DD"}
+# [0] Error Handler  (Error Trigger — fires on any workflow execution failure)
+# Sends Telegram notification with workflow name + error message.
+# Must be created FIRST so ERR_WF_ID can be injected into all other workflows.
+# ════════════════════════════════════════════════════════════════════════════════
+print("\n[0] Error Handler")
+
+n0_trigger = {
+    "id": uid(), "name": "Error Trigger",
+    "type": "n8n-nodes-base.errorTrigger",
+    "typeVersion": 1, "position": [240, 300],
+    "parameters": {}
+}
+n0_format = n_code("Format Error", [460, 300], r"""
+const wfName = $json.workflow?.name || 'Unknown';
+const errMsg = ($json.error?.message || 'Unknown error').split('\n')[0].slice(0, 200);
+const execUrl = $json.execution?.url || '';
+const execId  = $json.execution?.id  || '';
+const linkPart = execUrl ? `\n🔗 <a href="${execUrl}">Execution ${execId}</a>` : '';
+const message = `❌ <b>n8n workflow error</b>\n📋 <code>${wfName}</code>\n💬 ${errMsg}${linkPart}`;
+return [{ json: { message } }];
+""")
+n0_tg = n_telegram("Telegram", [680, 300])
+n0 = [n0_trigger, n0_format, n0_tg]
+c0 = {}
+conn(c0, "Error Trigger", "Format Error")
+conn(c0, "Format Error", "Telegram")
+ERR_WF_ID = create_workflow("Claude — Error Handler", n0, c0, error_trigger=True)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# [1] FOLLOWUPS.md Reminder  /webhook/claude-followups  +  Schedule Trigger 09:00 BKK
+# Webhook path: host sends {content, today} → parse dates → Telegram
+# Schedule path (02:00 UTC = 09:00 BKK): reads followups_text from Data Tables
 # ════════════════════════════════════════════════════════════════════════════════
 print("\n[1] FOLLOWUPS.md Reminder")
 
@@ -137,16 +193,57 @@ const message = `⏰ <b>FOLLOWUPS.md Reminder</b>\n\n${lines.join('\n\n')}`;
 return [{ json: { hasPending: true, message } }];
 """
 
+js1_read_db = """
+const http = require('http');
+const apiKey = $env.N8N_API_KEY;
+const PS_TBL = '__PS_TBL__';
+const filter = encodeURIComponent(JSON.stringify({
+  type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: '__global__' }]
+}));
+const followupsText = await new Promise((resolve, reject) => {
+  const opts = { hostname: 'localhost', port: 5678,
+    path: `/api/v1/data-tables/${PS_TBL}/rows?filter=${filter}`,
+    method: 'GET', headers: { 'Content-Type': 'application/json', 'X-N8N-API-KEY': apiKey } };
+  const req = http.request(opts, res => {
+    let raw = ''; res.on('data', c => raw += c);
+    res.on('end', () => { try { resolve((JSON.parse(raw).data||[])[0]?.followups_text||''); } catch { resolve(''); } });
+  });
+  req.on('error', reject); req.end();
+});
+if (!followupsText) return [{ json: { hasScheduled: false, message: '' } }];
+const message = `📌 <b>FOLLOWUPS Reminder</b>\\n\\n${followupsText}`;
+return [{ json: { hasScheduled: true, message } }];
+""".replace("__PS_TBL__", PS_TBL)
+
+n1_sched = {"id": uid(), "name": "Schedule Trigger",
+    "type": "n8n-nodes-base.scheduleTrigger",
+    "typeVersion": 1.2, "position": [240, 520],
+    "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 2 * * *"}]}}}
+
 n1 = [n_webhook("Webhook", [240,300], "claude-followups"),
       n_code("Parse Dates", [460,300], js1),
       n_if("Has Pending?", [680,300], "={{ $json.hasPending }}"),
       n_telegram("Telegram", [900,200]),
-      n_noop("No Reminders", [900,420])]
+      n_noop("No Reminders", [900,420]),
+      n1_sched,
+      n_code("Read DB", [460,520], js1_read_db),
+      n_if("Has Scheduled?", [680,520], "={{ $json.hasScheduled }}"),
+      {"id": uid(), "name": "Telegram Scheduled", "type": "n8n-nodes-base.telegram",
+       "typeVersion": 1.2, "position": [900, 420],
+       "parameters": {"resource": "message", "operation": "sendMessage",
+                      "chatId": TG_CHAT_ID, "text": "={{ $json.message }}",
+                      "additionalFields": {"parse_mode": "HTML"}},
+       "credentials": {"telegramApi": {"id": TG_CRED_ID, "name": TG_CRED_NAME}}},
+      n_noop("No Schedule", [900,640])]
 c1 = {}
 conn(c1, n1[0]["name"], n1[1]["name"])
 conn(c1, n1[1]["name"], n1[2]["name"])
 conn(c1, n1[2]["name"], n1[3]["name"], out=0)
 conn(c1, n1[2]["name"], n1[4]["name"], out=1)
+conn(c1, "Schedule Trigger", "Read DB")
+conn(c1, "Read DB", "Has Scheduled?")
+conn(c1, "Has Scheduled?", "Telegram Scheduled", out=0)
+conn(c1, "Has Scheduled?", "No Schedule", out=1)
 create_workflow("Claude — FOLLOWUPS Reminder", n1, c1)
 
 
@@ -320,26 +417,6 @@ conn(c4, n4[1]["name"], n4[2]["name"])
 conn(c4, n4[2]["name"], n4[3]["name"], out=0)
 conn(c4, n4[2]["name"], n4[4]["name"], out=1)
 create_workflow("Claude — Memory Health Monitor", n4, c4)
-
-
-# ── Create persistent Data Table (shared by [5] TypeCheck + [8] State Store) ──
-print("\nCreating project_state Data Table...")
-PS_TBL = create_data_table("project_state", [
-    {"name": "cwd_hash",        "type": "string"},
-    {"name": "project_name",    "type": "string"},
-    {"name": "sa",              "type": "boolean"},
-    {"name": "ux",              "type": "boolean"},
-    {"name": "fe",              "type": "boolean"},
-    {"name": "mem_alert",       "type": "string"},
-    {"name": "mem_files",       "type": "number"},
-    {"name": "mem_bytes",       "type": "number"},
-    {"name": "followups_text",  "type": "string"},
-    {"name": "type_check_text", "type": "string"},
-    {"name": "verify_result",   "type": "string"},
-    {"name": "debug_result",    "type": "string"},
-    {"name": "modified_files",  "type": "string"},
-    {"name": "updated_at",      "type": "string"},
-])
 
 
 # ════════════════════════════════════════════════════════════════════════════════
