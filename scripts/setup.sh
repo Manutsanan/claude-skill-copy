@@ -900,7 +900,7 @@ fi
 # Fully automated when N8N_EMAIL + N8N_PASSWORD are set in ~/.claude/.secrets/n8n.env:
 #   - n8n account creation (first run) / login
 #   - API key creation → written back to n8n.env automatically
-#   - 7 workflows created + activated via create-n8n-workflows.py
+#   - 10 workflows created + activated via create-n8n-workflows.py
 #
 # Manual step only if credentials are still at placeholder values:
 #   1. Edit ~/.claude/.secrets/n8n.env → set N8N_EMAIL + N8N_PASSWORD
@@ -1140,7 +1140,7 @@ else
     #   1. Detect first-run setup vs login page
     #   2. Create owner account or sign in
     #   3. Create API key "claude-code" → write N8N_API_KEY to n8n.env
-    #   4. Run create-n8n-workflows.py to create + activate all 7 workflows
+    #   4. Run create-n8n-workflows.py to create + activate all 10 workflows
     #
     # Requires N8N_EMAIL + N8N_PASSWORD to be set in n8n.env.
     # Pauses and waits if credentials are still at placeholder values.

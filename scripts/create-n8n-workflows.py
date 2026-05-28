@@ -6,14 +6,15 @@ import json, os, uuid, urllib.request, urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
 API_KEY = ""
-TG_CHAT_ID = ""
+TG_BOT_TOKEN = ""
+TG_CHAT_ID   = ""
 for line in open(os.path.expanduser("~/.claude/.secrets/n8n.env")):
     if line.startswith("N8N_API_KEY="): API_KEY = line.split("=",1)[1].strip()
 for line in open(os.path.expanduser("~/.claude/.secrets/tg.env")):
-    if line.startswith("TELEGRAM_CHAT_ID="): TG_CHAT_ID = line.split("=",1)[1].strip()
+    if line.startswith("TELEGRAM_BOT_TOKEN="): TG_BOT_TOKEN = line.split("=",1)[1].strip()
+    if line.startswith("TELEGRAM_CHAT_ID="):   TG_CHAT_ID   = line.split("=",1)[1].strip()
 
 BASE = "http://localhost:5678"
-TG_CRED_ID   = "YJkcTsUxMJDH2L2N"
 TG_CRED_NAME = "Telegram Claude Bot"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -27,6 +28,26 @@ def api(method, path, data=None):
         with urllib.request.urlopen(req) as r: return json.loads(r.read())
     except urllib.error.HTTPError as e:
         raise Exception(f"HTTP {e.code}: {e.read().decode()[:300]}")
+
+def get_or_create_tg_credential():
+    """Find 'Telegram Claude Bot' credential or create it from tg.env. Returns credential ID."""
+    try:
+        creds = api("GET", "credentials")
+        for c in (creds.get("data") or []):
+            if c.get("name") == TG_CRED_NAME and c.get("type") == "telegramApi":
+                print(f"  ↩ Telegram credential exists  id={c['id']}")
+                return c["id"]
+    except Exception: pass
+    if not TG_BOT_TOKEN:
+        raise Exception("TELEGRAM_BOT_TOKEN not found in ~/.claude/.secrets/tg.env — cannot create Telegram credential")
+    result = api("POST", "credentials", {
+        "name": TG_CRED_NAME,
+        "type": "telegramApi",
+        "data": {"accessToken": TG_BOT_TOKEN}
+    })
+    cid = result["id"]
+    print(f"  ✓ Telegram credential created  id={cid}")
+    return cid
 
 ERR_WF_ID = None  # set after Error Handler is created; injected into all other workflow settings
 
@@ -94,6 +115,10 @@ def n_telegram(name, pos):
 def n_noop(name, pos):
     return {"id": uid(), "name": name, "type": "n8n-nodes-base.noOp",
             "typeVersion": 1, "position": pos, "parameters": {}}
+
+# ── Pre-flight: resolve Telegram credential ID (machine-independent) ──────────
+print("\nResolving Telegram credential...")
+TG_CRED_ID = get_or_create_tg_credential()
 
 # ── Create persistent Data Table (shared by [1] FOLLOWUPS, [5] TypeCheck, [8] State Store) ──
 print("\nCreating project_state Data Table...")
