@@ -9,15 +9,16 @@ CWD_HASH=$(echo -n "$CWD_PATH" | python3 -c \
   "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:16])" 2>/dev/null)
 [ -z "$CWD_HASH" ] && exit 0
 
-# Fire once per (cwd × boot session)
+# Fire once per (cwd × boot session) — marker set only after n8n responds
+# so a down n8n at first prompt retries on the next prompt, not the whole session
 MARKER="/tmp/.claude-prefetch-${CWD_HASH}"
 [ -f "$MARKER" ] && exit 0
-touch "$MARKER" 2>/dev/null
 
 RESPONSE=$(curl -sf \
   "${N8N_BASE}/webhook/claude-prefetch?cwd_hash=${CWD_HASH}" \
   --max-time 1 2>/dev/null)
 [ -z "$RESPONSE" ] && exit 0
+touch "$MARKER" 2>/dev/null
 
 HAS=$(echo "$RESPONSE" | python3 -c \
   "import json,sys; d=json.load(sys.stdin); print('1' if d.get('has_context') else '0')" 2>/dev/null)

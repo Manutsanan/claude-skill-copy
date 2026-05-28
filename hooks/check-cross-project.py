@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Scans ~/.claude/projects/*/memory/feedback_*.md for entries whose
-`name:` slug appears in ≥2 different projects.
+Scans ~/.claude/projects/*/memory/*.md for entries whose `name:` slug appears
+in ≥2 different projects (all types: feedback, project, user, reference).
+Excludes MEMORY.md, phase checkpoint files, and hidden files.
 Writes promotion candidates to ~/.claude/memory/.cross-project-candidates.md
 so distill-memory can find them in the global memory audit (Step 1).
 Runs as async SessionStart hook — no Claude tokens involved.
@@ -19,10 +20,18 @@ MIN_PROJECTS = 2
 def main():
     slug_to_projects: dict[str, list[str]] = defaultdict(list)
 
-    for feedback_file in PROJECTS_DIR.glob("*/memory/feedback_*.md"):
-        project_id = feedback_file.parts[-3]
+    SKIP_NAMES = {"MEMORY.md"}
+    for mem_file in PROJECTS_DIR.glob("*/memory/*.md"):
+        # Skip index, checkpoints, and hidden files
+        if mem_file.name in SKIP_NAMES:
+            continue
+        if mem_file.name.startswith("project_phase_checkpoint"):
+            continue
+        if mem_file.name.startswith("."):
+            continue
+        project_id = mem_file.parts[-3]
         try:
-            text = feedback_file.read_text(encoding="utf-8", errors="ignore")
+            text = mem_file.read_text(encoding="utf-8", errors="ignore")
             m = re.search(r"^name:\s*(.+)$", text, re.MULTILINE)
             if not m:
                 continue

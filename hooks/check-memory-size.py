@@ -29,6 +29,9 @@ HOOK_ERROR_WINDOW_HOURS = 24
 DISTILL_IDLE_DAYS = 14
 DISTILL_MIN_COUNT = 10
 LOG_DIR = Path.home() / ".claude" / "logs"
+SKILLS_DIR = Path.home() / ".claude" / "skills"
+SKILL_WARN_LINES = 150
+SKILL_CRITICAL_LINES = 200
 
 
 def count_entries(memory_dir: Path) -> int:
@@ -109,6 +112,35 @@ def stale_pipeline_warning(directory: Path) -> Optional[str]:
     )
 
 
+def check_skill_learnings() -> Optional[str]:
+    """Warn when any skill's learnings.md exceeds line thresholds."""
+    if not SKILLS_DIR.exists():
+        return None
+    critical, warn = [], []
+    for f in sorted(SKILLS_DIR.glob("*/learnings.md")):
+        try:
+            lines = len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
+            skill = f.parent.name
+            if lines >= SKILL_CRITICAL_LINES:
+                critical.append(f"`{skill}` ({lines} lines)")
+            elif lines >= SKILL_WARN_LINES:
+                warn.append(f"`{skill}` ({lines} lines)")
+        except Exception:
+            pass
+    parts = []
+    if critical:
+        parts.append(f"🔴 critical (≥{SKILL_CRITICAL_LINES}): {', '.join(critical)}")
+    if warn:
+        parts.append(f"🟡 warn (≥{SKILL_WARN_LINES}): {', '.join(warn)}")
+    if not parts:
+        return None
+    return (
+        f"📚 **Skill learnings oversized** — {'; '.join(parts)}. "
+        f"Large learnings.md files load fully on every skill invoke and consume context. "
+        f"Run `/distill-memory` to prune stale entries."
+    )
+
+
 def distill_idle_warning(global_count: int, project_count: int) -> Optional[str]:
     """Time-based distill suggestion — only fires when below count-based thresholds."""
     total = global_count + project_count
@@ -161,6 +193,10 @@ def main():
         warnings.append(
             f"🔴 Global memory has **{global_count} entries** — `/distill-memory` recommended."
         )
+
+    skill_warn = check_skill_learnings()
+    if skill_warn:
+        warnings.append(skill_warn)
 
     distill_warn = distill_idle_warning(global_count, project_count)
     if distill_warn:
