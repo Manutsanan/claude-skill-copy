@@ -41,12 +41,6 @@ if pipeline.get('sa') or pipeline.get('ux') or pipeline.get('fe'):
     fe = '✅' if pipeline.get('fe') else '⏳'
     sections.append(f'Pipeline: sa {sa} → ux {ux} → fe {fe}')
 
-# Alerts section — memory + type check errors
-for alert in (d.get('alerts') or []):
-    a = clean(alert)
-    if a:
-        sections.append(f'⚠ {a}')
-
 # Followups
 for f in (d.get('followups') or []):
     v = clean(f)
