@@ -29,7 +29,9 @@ set -euo pipefail
 #   --with-codegraph        Install CodeGraph binary + register MCP in ~/.claude.json (opt-in)
 #   --with-context7         Register Context7 MCP in ~/.claude.json — live library docs (opt-in)
 #   --with-weekly-distill   Install weekly memory distill cron (Mon 09:00) — opt-in, requires Telegram credentials at ~/.claude/.secrets/tg.env
-#   --with-n8n              Start n8n Docker container + install 5 hook scripts + register Stop hooks + load launchd agents (macOS)
+#   --with-n8n              Start n8n Docker container + install 6 hook scripts + register Stop/StopFailure/UserPromptSubmit hooks + load launchd agents (macOS)
+#   --with-rtk              Install rtk-rewrite.sh PreToolUse hook (token savings via RTK CLI — requires rtk >= 0.23.0)
+#   --with-cmux             Install cmux status hooks (Stop/StopFailure/UserPromptSubmit — requires cmux.app)
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 HOME_CLAUDE="$HOME/.claude"
@@ -44,6 +46,8 @@ WITH_CODEGRAPH=0
 WITH_CONTEXT7=0
 WITH_WEEKLY_DISTILL=0
 WITH_N8N=0
+WITH_RTK=0
+WITH_CMUX=0
 for arg in "$@"; do
   case "$arg" in
     --force) FORCE=1 ;;
@@ -56,6 +60,8 @@ for arg in "$@"; do
     --with-context7) WITH_CONTEXT7=1 ;;
     --with-weekly-distill) WITH_WEEKLY_DISTILL=1 ;;
     --with-n8n) WITH_N8N=1 ;;
+    --with-rtk) WITH_RTK=1 ;;
+    --with-cmux) WITH_CMUX=1 ;;
     -h|--help)
       sed -n '3,26p' "$0"
       exit 0
@@ -360,15 +366,16 @@ else
   fi
 fi
 
-# ---------- 7. Lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit + PreToolUse) ----------
+# ---------- 7. Lifecycle hooks (SessionStart + PostCompact + UserPromptSubmit + PreToolUse + PostToolUse) ----------
 #
 # Installs hooks that restore pipeline state after compaction and log skill activity:
-#   check-cross-project.py  → SessionStart (async)     — scan project memories for slugs in ≥2 projects
-#   check-memory-size.py    → SessionStart (async)     — warn at memory cap + surface recent hook errors
-#   post-compact.py         → PostCompact              — show in-progress checkpoints as systemMessage
-#   inject-checkpoint.py    → UserPromptSubmit         — inject checkpoints as additionalContext (once per compaction)
-#   log-skill-invoke.py     → PreToolUse (Skill)       — append JSONL of skill invocations to ~/.claude/logs/
-#   log-user-prompt.py      → UserPromptSubmit         — append truncated prompt JSONL (200 chars, secrets redacted)
+#   check-cross-project.py  → SessionStart (async)          — scan project memories for slugs in ≥2 projects
+#   check-memory-size.py    → SessionStart (async)          — warn at memory cap + surface recent hook errors
+#   post-compact.py         → PostCompact                   — show in-progress checkpoints as systemMessage
+#   inject-checkpoint.py    → UserPromptSubmit              — inject checkpoints as additionalContext (once per compaction)
+#   log-skill-invoke.py     → PreToolUse (Skill)            — append JSONL of skill invocations to ~/.claude/logs/
+#   log-user-prompt.py      → UserPromptSubmit              — append truncated prompt JSONL (200 chars, secrets redacted)
+#   skill-vocab-sync.py     → PostToolUse Edit|Write (async)— detect feedback_skill_trigger_* saves; auto-append to skill_trigger_vocabulary.md
 #
 # All hooks exit 0 on internal failure (never block); runtime errors go to ~/.claude/logs/hook-errors.jsonl
 # and are surfaced by check-memory-size.py on the next session start.
@@ -390,6 +397,8 @@ LOG_SKILL_HOOK_SRC="$REPO/hooks/log-skill-invoke.py"
 LOG_SKILL_HOOK_DST="$HOME_CLAUDE/hooks/log-skill-invoke.py"
 LOG_PROMPT_HOOK_SRC="$REPO/hooks/log-user-prompt.py"
 LOG_PROMPT_HOOK_DST="$HOME_CLAUDE/hooks/log-user-prompt.py"
+VOCAB_SYNC_HOOK_SRC="$REPO/hooks/skill-vocab-sync.py"
+VOCAB_SYNC_HOOK_DST="$HOME_CLAUDE/hooks/skill-vocab-sync.py"
 
 if ! command -v python3 &>/dev/null; then
   warn "python3 not found — skipping lifecycle hooks (skills still work without them)"
@@ -413,7 +422,8 @@ else
     "$INJECT_HOOK_SRC:$INJECT_HOOK_DST" \
     "$MEM_SIZE_HOOK_SRC:$MEM_SIZE_HOOK_DST" \
     "$LOG_SKILL_HOOK_SRC:$LOG_SKILL_HOOK_DST" \
-    "$LOG_PROMPT_HOOK_SRC:$LOG_PROMPT_HOOK_DST"; do
+    "$LOG_PROMPT_HOOK_SRC:$LOG_PROMPT_HOOK_DST" \
+    "$VOCAB_SYNC_HOOK_SRC:$VOCAB_SYNC_HOOK_DST"; do
     SRC="${PAIR%%:*}"
     DST="${PAIR##*:}"
     FNAME="$(basename "$DST")"
@@ -530,6 +540,24 @@ else
       .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd}]}]
     ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
     ok "Registered UserPromptSubmit hook (log-user-prompt.py)"
+  fi
+
+  # Register PostToolUse hook — skill-vocab-sync.py (async, matcher=Edit|Write|NotebookEdit)
+  # Detects feedback_skill_trigger_* saves; early-exits in <2ms for any other file.
+  VOCAB_SYNC_CMD="python3 $VOCAB_SYNC_HOOK_DST"
+  if jq -e --arg cmd "$VOCAB_SYNC_CMD" \
+    '.hooks.PostToolUse // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+    "$SETTINGS" >/dev/null 2>&1; then
+    ok "PostToolUse hook (skill-vocab-sync.py) already registered"
+  else
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+    tmp="$(mktemp)"
+    jq --arg cmd "$VOCAB_SYNC_CMD" '
+      .hooks //= {} |
+      .hooks.PostToolUse //= [] |
+      .hooks.PostToolUse += [{"matcher": "Edit|Write|NotebookEdit", "hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    ok "Registered PostToolUse hook (skill-vocab-sync.py, matcher=Edit|Write|NotebookEdit, async)"
   fi
 fi
 
@@ -953,6 +981,7 @@ else
     # 12c. Copy hook scripts
     N8N_HOOKS=(
       "n8n-notify.sh"
+      "n8n-prefetch.sh"
       "quality-gate.sh"
       "n8n-followups-check.sh"
       "n8n-weekly-report.sh"
@@ -981,17 +1010,17 @@ else
       ok "Installed tg-config.sh"
     fi
 
-    # 12d. Register Stop hooks (n8n-notify.sh + quality-gate.sh) in settings.json
+    # 12d. Register hooks in settings.json (Stop + StopFailure + UserPromptSubmit)
     if ! command -v jq &>/dev/null; then
-      warn "jq not found — skip Stop hook registration; add manually to ~/.claude/settings.json"
+      warn "jq not found — skip hook registration; add manually to ~/.claude/settings.json"
     elif [ ! -f "$SETTINGS" ]; then
       echo '{"hooks":{}}' > "$SETTINGS"
     fi
 
     if command -v jq &>/dev/null; then
+      # Stop hooks — n8n-notify.sh + quality-gate.sh (async)
       for HOOK_FILE in "n8n-notify.sh" "quality-gate.sh"; do
         HOOK_CMD="$HOME_CLAUDE/hooks/$HOOK_FILE"
-        ASYNC="true"
         if jq -e --arg cmd "$HOOK_CMD" \
           '.hooks.Stop // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
           "$SETTINGS" >/dev/null 2>&1; then
@@ -999,14 +1028,48 @@ else
         else
           cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
           tmp="$(mktemp)"
-          jq --arg cmd "$HOOK_CMD" --argjson async "$ASYNC" '
+          jq --arg cmd "$HOOK_CMD" '
             .hooks //= {} |
             .hooks.Stop //= [] |
-            .hooks.Stop += [{"hooks": [{"type": "command", "command": $cmd, "async": $async}]}]
+            .hooks.Stop += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
           ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
           ok "Registered Stop hook ($HOOK_FILE, async)"
         fi
       done
+
+      # StopFailure hook — n8n-notify.sh (tracks error sessions in pipeline tracker)
+      NOTIFY_CMD="$HOME_CLAUDE/hooks/n8n-notify.sh"
+      if jq -e --arg cmd "$NOTIFY_CMD" \
+        '.hooks.StopFailure // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+        "$SETTINGS" >/dev/null 2>&1; then
+        ok "StopFailure hook (n8n-notify.sh) already registered"
+      else
+        cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+        tmp="$(mktemp)"
+        jq --arg cmd "$NOTIFY_CMD" '
+          .hooks //= {} |
+          .hooks.StopFailure //= [] |
+          .hooks.StopFailure += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+        ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+        ok "Registered StopFailure hook (n8n-notify.sh, async)"
+      fi
+
+      # UserPromptSubmit hook — n8n-prefetch.sh (inject pipeline state once per session)
+      PREFETCH_CMD="$HOME_CLAUDE/hooks/n8n-prefetch.sh"
+      if jq -e --arg cmd "$PREFETCH_CMD" \
+        '.hooks.UserPromptSubmit // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+        "$SETTINGS" >/dev/null 2>&1; then
+        ok "UserPromptSubmit hook (n8n-prefetch.sh) already registered"
+      else
+        cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+        tmp="$(mktemp)"
+        jq --arg cmd "$PREFETCH_CMD" '
+          .hooks //= {} |
+          .hooks.UserPromptSubmit //= [] |
+          .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd}]}]
+        ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+        ok "Registered UserPromptSubmit hook (n8n-prefetch.sh)"
+      fi
     fi
 
     # 12e. Load launchd plists (macOS only)
@@ -1138,7 +1201,7 @@ else
       if [ -n "$N8N_KEY_VAL" ] && [ "$N8N_KEY_VAL" != "your-n8n-api-key-here" ]; then
         note "Creating n8n workflows..."
         if python3 "$HOME_CLAUDE/scripts/create-n8n-workflows.py"; then
-          ok "7 n8n workflows created and activated"
+          ok "10 n8n workflows created and activated"
         else
           warn "Workflow creation failed — run manually: python3 ~/.claude/scripts/create-n8n-workflows.py"
         fi
@@ -1149,7 +1212,137 @@ else
 
       echo ""
       echo "  Optional: add TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID to ~/.claude/.secrets/tg.env"
-      echo "  for Telegram notifications from all 7 workflows"
+      echo "  for Telegram notifications from all 10 workflows"
+    fi
+  fi
+fi
+
+# ---------- 13. RTK token-saving hook (opt-in) ----------
+#
+# Installs rtk-rewrite.sh as a PreToolUse hook on Bash commands.
+# Rewrites shell commands to use `rtk` for token savings (60-90% on common ops).
+# Requires: rtk CLI >= 0.23.0 (https://github.com/rtk-ai/rtk)
+# Skip if you don't have RTK installed — skills work fine without it.
+
+if [ "$WITH_RTK" -eq 0 ]; then
+  note "RTK hook skipped (add --with-rtk to install, requires rtk >= 0.23.0)"
+else
+  note "Installing RTK token-saving hook (PreToolUse → rtk-rewrite.sh)"
+  RTK_HOOK_SRC="$REPO/hooks/rtk-rewrite.sh"
+  RTK_HOOK_DST="$HOME_CLAUDE/hooks/rtk-rewrite.sh"
+
+  if [ ! -f "$RTK_HOOK_SRC" ]; then
+    warn "rtk-rewrite.sh missing in repo hooks/ — skipping"
+  elif ! command -v rtk &>/dev/null; then
+    warn "rtk not found in PATH — install rtk >= 0.23.0 first, then re-run --with-rtk"
+    warn "See: https://github.com/rtk-ai/rtk"
+  else
+    if [ -f "$RTK_HOOK_DST" ] && cmp -s "$RTK_HOOK_SRC" "$RTK_HOOK_DST"; then
+      ok "rtk-rewrite.sh already up-to-date"
+    else
+      cp "$RTK_HOOK_SRC" "$RTK_HOOK_DST"
+      chmod +x "$RTK_HOOK_DST"
+      ok "Installed rtk-rewrite.sh"
+    fi
+
+    if command -v jq &>/dev/null && [ -f "$SETTINGS" ]; then
+      RTK_CMD="$RTK_HOOK_DST"
+      if jq -e --arg cmd "$RTK_CMD" \
+        '.hooks.PreToolUse // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+        "$SETTINGS" >/dev/null 2>&1; then
+        ok "PreToolUse hook (rtk-rewrite.sh) already registered"
+      else
+        cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+        tmp="$(mktemp)"
+        jq --arg cmd "$RTK_CMD" '
+          .hooks //= {} |
+          .hooks.PreToolUse //= [] |
+          .hooks.PreToolUse += [{"matcher": "Bash", "hooks": [{"type": "command", "command": $cmd}]}]
+        ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+        ok "Registered PreToolUse hook (rtk-rewrite.sh, matcher=Bash)"
+      fi
+    fi
+  fi
+fi
+
+# ---------- 14. cmux status hooks (opt-in) ----------
+#
+# Installs 3 cmux hooks that show Claude's working/done/error state in the cmux sidebar.
+# Requires: cmux.app at /Applications/cmux.app
+# Safe to install even without cmux — each hook guards on $CMUX_SOCKET_PATH.
+
+if [ "$WITH_CMUX" -eq 0 ]; then
+  note "cmux hooks skipped (add --with-cmux to install, requires cmux.app)"
+else
+  note "Installing cmux status hooks (Stop/StopFailure/UserPromptSubmit)"
+  CMUX_HOOKS=("cmux-done.sh" "cmux-error.sh" "cmux-working.sh")
+
+  for FNAME in "${CMUX_HOOKS[@]}"; do
+    SRC="$REPO/hooks/$FNAME"
+    DST="$HOME_CLAUDE/hooks/$FNAME"
+    if [ ! -f "$SRC" ]; then
+      warn "$FNAME missing in repo hooks/ — skipping"
+      continue
+    fi
+    if [ -f "$DST" ] && cmp -s "$SRC" "$DST"; then
+      ok "$FNAME already up-to-date"
+    else
+      cp "$SRC" "$DST"
+      chmod +x "$DST"
+      ok "Installed $FNAME"
+    fi
+  done
+
+  if command -v jq &>/dev/null && [ -f "$SETTINGS" ]; then
+    # Stop → cmux-done.sh (async)
+    DONE_CMD="$HOME_CLAUDE/hooks/cmux-done.sh"
+    if jq -e --arg cmd "$DONE_CMD" \
+      '.hooks.Stop // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+      "$SETTINGS" >/dev/null 2>&1; then
+      ok "Stop hook (cmux-done.sh) already registered"
+    else
+      cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+      tmp="$(mktemp)"
+      jq --arg cmd "$DONE_CMD" '
+        .hooks //= {} |
+        .hooks.Stop //= [] |
+        .hooks.Stop += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+      ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+      ok "Registered Stop hook (cmux-done.sh, async)"
+    fi
+
+    # StopFailure → cmux-error.sh (async)
+    ERROR_CMD="$HOME_CLAUDE/hooks/cmux-error.sh"
+    if jq -e --arg cmd "$ERROR_CMD" \
+      '.hooks.StopFailure // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+      "$SETTINGS" >/dev/null 2>&1; then
+      ok "StopFailure hook (cmux-error.sh) already registered"
+    else
+      cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+      tmp="$(mktemp)"
+      jq --arg cmd "$ERROR_CMD" '
+        .hooks //= {} |
+        .hooks.StopFailure //= [] |
+        .hooks.StopFailure += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+      ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+      ok "Registered StopFailure hook (cmux-error.sh, async)"
+    fi
+
+    # UserPromptSubmit → cmux-working.sh (async)
+    WORKING_CMD="$HOME_CLAUDE/hooks/cmux-working.sh"
+    if jq -e --arg cmd "$WORKING_CMD" \
+      '.hooks.UserPromptSubmit // [] | map(.hooks[]?.command) | flatten | any(. == $cmd)' \
+      "$SETTINGS" >/dev/null 2>&1; then
+      ok "UserPromptSubmit hook (cmux-working.sh) already registered"
+    else
+      cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y-%m-%d-%H%M%S)"
+      tmp="$(mktemp)"
+      jq --arg cmd "$WORKING_CMD" '
+        .hooks //= {} |
+        .hooks.UserPromptSubmit //= [] |
+        .hooks.UserPromptSubmit += [{"hooks": [{"type": "command", "command": $cmd, "async": true}]}]
+      ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+      ok "Registered UserPromptSubmit hook (cmux-working.sh, async)"
     fi
   fi
 fi
@@ -1164,7 +1357,9 @@ Next steps:
        "ใช้ skill debug ตรวจอะไรก่อนเริ่ม?"
      Expect mantra recital + Phase 0 reference.
 
-  2. (Optional) Install RTK CLI if you want token savings on shell commands.
+  2. (Optional) Install RTK CLI + hook for token savings on shell commands:
+       brew install rtk   # or: cargo install rtk
+       ./scripts/setup.sh --with-rtk
      Skip if you don't have it — skills still work, just no rtk filtering.
 
   3. (Optional) Install CodeGraph MCP for semantic ripple checks:
@@ -1185,7 +1380,11 @@ Next steps:
        ./scripts/setup.sh --with-chrome-devtools
      Use only when you need: lighthouse score, Web Vitals trace, memory heap snapshot.
 
-  6. Memory starts empty — that's expected. Lessons accumulate as you work.
+  8. (Optional) Install cmux status hooks (working/done/error sidebar indicator):
+       ./scripts/setup.sh --with-cmux
+     Requires cmux.app — safe to skip otherwise.
+
+  9. Memory starts empty — that's expected. Lessons accumulate as you work.
      Read CLAUDE.md sections "Save triggers" + "Graduation pipeline" for how it grows.
 
   7. Customize for your project: add a CLAUDE.md inside your project root with
