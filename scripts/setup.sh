@@ -63,7 +63,7 @@ for arg in "$@"; do
     --with-rtk) WITH_RTK=1 ;;
     --with-cmux) WITH_CMUX=1 ;;
     -h|--help)
-      sed -n '3,26p' "$0"
+      sed -n '3,35p' "$0"
       exit 0
       ;;
     *)
