@@ -271,7 +271,7 @@ hooks/
     ├── tg-config.sh             # Telegram credential loader — sources ~/.claude/.secrets/tg.env (opt-in)
     ├── check-tg-bridge.sh       # SessionStart → auto-restart tg-bridge daemon (opt-in, not registered by setup.sh)
     ├── telegram-notify.sh       # Stop → push end-of-turn summary to Telegram (opt-in)
-    ├── n8n-notify.sh            # Stop (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → /webhook/claude-stop + /webhook/claude-memory + /webhook/claude-state-store
+    ├── n8n-notify.sh            # Stop + StopFailure (async) → enriched payload (last_skill, checkpoint_phases, mem_files/bytes) → 3 webhooks in parallel (claude-stop, claude-memory, claude-state-store)
     ├── n8n-prefetch.sh          # UserPromptSubmit → query n8n state store once per (project × reboot); inject pipeline state / memory alerts / followups as additionalContext
     ├── git-init-check.sh        # PostToolUse (matcher=Bash) → reads stdin JSON to detect actual `git init`; emits .gitignore reminder only when needed (no false positives on complex commands)
     ├── skill-vocab-sync.py      # PostToolUse (async, matcher=Write|Edit) → detects feedback_skill_trigger_* saves; parses phrase/correct/wrong; appends to skill_trigger_vocabulary.md immediately; POSTs to n8n /webhook/claude-vocab-correction for tracking + recurring-mismatch alerts

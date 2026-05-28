@@ -67,20 +67,17 @@ PAYLOAD=$(echo "$INPUT" | jq \
     --arg cwd_hash "$CWD_HASH" \
     '{cwd:$cwd,timestamp:$ts,last_skill:$last_skill,cwd_hash:$cwd_hash,checkpoint_phases:[],mem_files:0,mem_bytes:0}')
 
-# POST to pipeline tracker
+# POST to all three webhooks in parallel — avoids sequential 5s timeouts
 curl -sf -X POST "$N8N_WEBHOOK" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
-  --max-time 5 2>/dev/null || true
-
-# POST same payload to memory health monitor (separate workflow)
+  --max-time 5 2>/dev/null &
 curl -sf -X POST "http://localhost:5678/webhook/claude-memory" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
-  --max-time 5 2>/dev/null || true
-
-# POST to state store — feeds pre-fetch cache for next session
+  --max-time 5 2>/dev/null &
 curl -sf -X POST "http://localhost:5678/webhook/claude-state-store" \
   -H "Content-Type: application/json" \
   -d "$PAYLOAD" \
-  --max-time 5 2>/dev/null || true
+  --max-time 5 2>/dev/null &
+wait
