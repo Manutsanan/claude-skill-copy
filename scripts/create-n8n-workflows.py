@@ -368,6 +368,7 @@ const staticData = $getWorkflowStaticData('global');
 const body = $input.first().json.body || $input.first().json;
 
 const project    = body.project || 'unknown';
+const cwdHash    = body.cwd_hash || '';          // prefer hash over name to avoid collision
 const label      = body.label || 'TS';
 const exitCode   = parseInt(body.exit_code ?? 0, 10);
 const errorCount = parseInt(body.error_count ?? 0, 10);
@@ -397,18 +398,23 @@ if (exitCode === 0) {
   }
 }
 
-// Persist type_check result to Data Tables (state store) by project_name
+// Persist to Data Tables — use cwd_hash when available to avoid project_name collision
 const apiKey = $env.N8N_API_KEY;
 const PS_TBL = '__PS_TBL__';
+const AUTH = { 'X-N8N-API-KEY': apiKey };
 const typeCheckText = exitCode !== 0
   ? `TYPE_CHECK: ${errorCount} error(s) in ${project} (${label})${trend}`
   : '';
+const filterCol = cwdHash ? 'cwd_hash' : 'project_name';
+const filterVal = cwdHash || project;
+const upsertData = cwdHash
+  ? { cwd_hash: cwdHash, project_name: project, type_check_text: typeCheckText, updated_at: new Date().toISOString() }
+  : { project_name: project, type_check_text: typeCheckText, updated_at: new Date().toISOString() };
 try {
   await httpPost(`/api/v1/data-tables/${PS_TBL}/rows/upsert`,
-    { filter: { type: 'and', filters: [{ columnName: 'project_name', condition: 'eq', value: project }] },
-      data: { project_name: project, type_check_text: typeCheckText, updated_at: new Date().toISOString() },
-      returnData: false },
-    { 'X-N8N-API-KEY': apiKey });
+    { filter: { type: 'and', filters: [{ columnName: filterCol, condition: 'eq', value: filterVal }] },
+      data: upsertData, returnData: false },
+    AUTH);
 } catch(e) {}
 
 return [{ json: { message } }];

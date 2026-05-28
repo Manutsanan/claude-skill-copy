@@ -21,6 +21,7 @@ RECENT=$(find "$CWD" \( -name "*.ts" -o -name "*.vue" \) \
 [ "$RECENT" -eq 0 ] && exit 0
 
 PROJECT=$(basename "$CWD")
+CWD_HASH=$(echo -n "$CWD" | python3 -c "import sys,hashlib; print(hashlib.sha256(sys.stdin.read().encode()).hexdigest()[:16])" 2>/dev/null || echo "")
 
 # Debounce: skip if no source file is newer than the last-run marker
 DEBOUNCE_MARKER="/tmp/.claude-typecheck-${PROJECT}"
@@ -71,12 +72,13 @@ fi
 N8N_WEBHOOK="http://localhost:5678/webhook/claude-typecheck"
 N8N_PAYLOAD=$(jq -n \
     --arg project "$PROJECT" \
+    --arg cwd_hash "$CWD_HASH" \
     --arg label "$LABEL" \
     --argjson exit_code "$TS_EXIT" \
     --argjson error_count "$ERROR_COUNT" \
     --arg top_errors "$TOP_ERRORS" \
     --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{project:$project,label:$label,exit_code:$exit_code,error_count:$error_count,top_errors:$top_errors,timestamp:$ts}')
+    '{project:$project,cwd_hash:$cwd_hash,label:$label,exit_code:$exit_code,error_count:$error_count,top_errors:$top_errors,timestamp:$ts}')
 
 N8N_OK=$(curl -sf -X POST "$N8N_WEBHOOK" \
     -H "Content-Type: application/json" \
