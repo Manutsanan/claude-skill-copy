@@ -1102,7 +1102,7 @@ else
       done
     else
       warn "launchd is macOS-only — schedule these scripts manually on Linux:"
-      warn "  n8n-followups-check.sh (daily 09:00), n8n-weekly-report.sh (Mon 09:00), n8n-drift-check.sh (daily 10:00)"
+      warn "  n8n-followups-check.sh (daily 08:58), n8n-weekly-report.sh (Mon 09:00), n8n-drift-check.sh (daily 10:00)"
     fi
 
     # 12f. Copy workflow scripts
