@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create 9 webhook-based n8n workflows (Docker-compatible — no Execute Command nodes)."""
+"""Create 10 webhook-based n8n workflows (Docker-compatible — no Execute Command nodes)."""
 import json, os, uuid, urllib.request, urllib.error
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -36,6 +36,20 @@ def create_workflow(name, nodes, connections):
     except: pass
     print(f"  ✓ {name}  id={wid}")
     return wid
+
+def create_data_table(name, columns):
+    """Create a Data Table; return its ID. Skips silently if already exists."""
+    try:
+        tables = api("GET", "data-tables")
+        for t in (tables.get("data") or []):
+            if t.get("name") == name:
+                print(f"  ↩ Data Table '{name}' exists  id={t['id']}")
+                return t["id"]
+    except Exception: pass
+    result = api("POST", "data-tables", {"name": name, "columns": columns})
+    tid = result["id"]
+    print(f"  ✓ Data Table '{name}'  id={tid}")
+    return tid
 
 def conn(c, frm, to, out=0):
     c.setdefault(frm, {"main": []})
@@ -308,6 +322,26 @@ conn(c4, n4[2]["name"], n4[4]["name"], out=1)
 create_workflow("Claude — Memory Health Monitor", n4, c4)
 
 
+# ── Create persistent Data Table (shared by [5] TypeCheck + [8] State Store) ──
+print("\nCreating project_state Data Table...")
+PS_TBL = create_data_table("project_state", [
+    {"name": "cwd_hash",        "type": "string"},
+    {"name": "project_name",    "type": "string"},
+    {"name": "sa",              "type": "boolean"},
+    {"name": "ux",              "type": "boolean"},
+    {"name": "fe",              "type": "boolean"},
+    {"name": "mem_alert",       "type": "string"},
+    {"name": "mem_files",       "type": "number"},
+    {"name": "mem_bytes",       "type": "number"},
+    {"name": "followups_text",  "type": "string"},
+    {"name": "type_check_text", "type": "string"},
+    {"name": "verify_result",   "type": "string"},
+    {"name": "debug_result",    "type": "string"},
+    {"name": "modified_files",  "type": "string"},
+    {"name": "updated_at",      "type": "string"},
+])
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # [5] TypeCheck Trend  /webhook/claude-typecheck
 # Host sends: {project, label, exit_code, error_count, top_errors, timestamp}
@@ -315,6 +349,21 @@ create_workflow("Claude — Memory Health Monitor", n4, c4)
 print("\n[5] TypeCheck Trend")
 
 js5 = r"""
+const http = require('http');
+
+function httpPost(path, body, headers) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const opts = { hostname: 'localhost', port: 5678, path, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), ...headers } };
+    const req = http.request(opts, res => {
+      let raw = ''; res.on('data', c => raw += c);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(raw); } });
+    });
+    req.on('error', reject); req.write(data); req.end();
+  });
+}
+
 const staticData = $getWorkflowStaticData('global');
 const body = $input.first().json.body || $input.first().json;
 
@@ -347,11 +396,26 @@ if (exitCode === 0) {
     message += `\n\n<code>${esc}</code>`;
   }
 }
+
+// Persist type_check result to Data Tables (state store) by project_name
+const apiKey = $env.N8N_API_KEY;
+const PS_TBL = '__PS_TBL__';
+const typeCheckText = exitCode !== 0
+  ? `TYPE_CHECK: ${errorCount} error(s) in ${project} (${label})${trend}`
+  : '';
+try {
+  await httpPost(`/api/v1/data-tables/${PS_TBL}/rows/upsert`,
+    { filter: { type: 'and', filters: [{ columnName: 'project_name', condition: 'eq', value: project }] },
+      data: { project_name: project, type_check_text: typeCheckText, updated_at: new Date().toISOString() },
+      returnData: false },
+    { 'X-N8N-API-KEY': apiKey });
+} catch(e) {}
+
 return [{ json: { message } }];
 """
 
 n5 = [n_webhook("Webhook", [240,300], "claude-typecheck"),
-      n_code("Compute Trend", [460,300], js5),
+      n_code("Compute Trend", [460,300], js5.replace('__PS_TBL__', PS_TBL)),
       n_telegram("Telegram", [680,300])]
 c5 = {}
 conn(c5, n5[0]["name"], n5[1]["name"])
@@ -432,46 +496,144 @@ create_workflow("Claude — Cross-Project Pattern Digest", n7, c7)
 print("\n[8] State Store + Pre-fetch Cache")
 
 js8_read = r"""
-const sd = $getWorkflowStaticData('global');
-const query = $input.first().json.query || {};
-const cwdHash = query.cwd_hash || '';
+const http = require('http');
+const apiKey = $env.N8N_API_KEY;
+const PS_TBL = '__PS_TBL__';
 
-const pipeline = sd.pipelines?.[cwdHash] || null;
-const memAlert = sd.memAlert || null;
-const followups = sd.pendingFollowups || null;
+function httpGet(path, headers) {
+  return new Promise((resolve, reject) => {
+    const opts = { hostname: 'localhost', port: 5678, path, method: 'GET',
+      headers: { 'Content-Type': 'application/json', ...headers } };
+    const req = http.request(opts, res => {
+      let raw = ''; res.on('data', c => raw += c);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(raw); } });
+    });
+    req.on('error', reject); req.end();
+  });
+}
+
+const query   = $input.first().json.query || {};
+const cwdHash = query.cwd_hash || '';
+const AUTH    = { 'X-N8N-API-KEY': apiKey };
+
+function enc(obj) { return encodeURIComponent(JSON.stringify(obj)); }
+
+let pipeline = null, memAlert = null, followups = null;
+let typeCheckText = null, verifyResult = null, debugResult = null;
+let modifiedFiles = [];
+
+if (cwdHash) {
+  const filter = enc({ type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: cwdHash }] });
+  const d = await httpGet(`/api/v1/data-tables/${PS_TBL}/rows?filter=${filter}`, AUTH);
+  const rows = d.data || [];
+  if (rows.length > 0) {
+    const r = rows[0];
+    if (r.sa || r.ux || r.fe) pipeline = { sa: r.sa, ux: r.ux, fe: r.fe };
+    if (r.mem_alert)       memAlert      = r.mem_alert;
+    if (r.followups_text)  followups     = r.followups_text;
+    if (r.type_check_text) typeCheckText = r.type_check_text;
+    if (r.verify_result)   verifyResult  = r.verify_result;
+    if (r.debug_result)    debugResult   = r.debug_result;
+    if (r.modified_files) {
+      try { modifiedFiles = JSON.parse(r.modified_files); } catch {}
+    }
+  }
+}
+
+const gFilter = enc({ type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: '__global__' }] });
+const gData   = await httpGet(`/api/v1/data-tables/${PS_TBL}/rows?filter=${gFilter}`, AUTH);
+const gRows   = gData.data || [];
+if (gRows.length > 0) {
+  if (!memAlert  && gRows[0].mem_alert)      memAlert  = gRows[0].mem_alert;
+  if (!followups && gRows[0].followups_text) followups = gRows[0].followups_text;
+}
 
 const items = [];
-if (pipeline && (pipeline.sa || pipeline.ux || pipeline.fe)) {
+if (pipeline) {
   const sa = pipeline.sa ? '✅' : '⏳';
   const ux = pipeline.ux ? '✅' : '⏳';
   const fe = pipeline.fe ? '✅' : '⏳';
   items.push(`Pipeline: sa ${sa} → ux ${ux} → fe ${fe}`);
 }
-if (memAlert) items.push(memAlert);
-if (followups) items.push(followups);
+if (memAlert)       items.push(memAlert);
+if (followups)      items.push(followups);
+if (typeCheckText)  items.push(typeCheckText);
+if (verifyResult)   items.push(`Last verify: ${verifyResult}`);
+if (debugResult)    items.push(`Last debug: ${debugResult}`);
+if (modifiedFiles.length > 0) {
+  items.push(`Modified: ${modifiedFiles.slice(0, 5).join(', ')}${modifiedFiles.length > 5 ? ` +${modifiedFiles.length - 5} more` : ''}`);
+}
 
 return [{ json: {
   has_context: items.length > 0,
   items,
-  pipeline: pipeline || { sa: false, ux: false, fe: false }
+  pipeline:   pipeline || { sa: false, ux: false, fe: false },
+  alerts:     [memAlert, typeCheckText].filter(Boolean),
+  followups:  followups ? [followups] : [],
+  verify:     verifyResult || null,
+  debug:      debugResult  || null,
+  modified_files: modifiedFiles
 }}];
 """
 
 js8_write = r"""
-const sd = $getWorkflowStaticData('global');
-const body = $input.first().json.body || $input.first().json;
+const http = require('http');
+const apiKey = $env.N8N_API_KEY;
+const PS_TBL = '__PS_TBL__';
 
-const cwdHash   = body.cwd_hash   || '';
-const lastSkill = body.last_skill || '';
-const phases    = body.checkpoint_phases || [];
-const memFiles  = parseInt(body.mem_files  || 0, 10);
-const memBytes  = parseInt(body.mem_bytes  || 0, 10);
+function httpGet(path, headers) {
+  return new Promise((resolve, reject) => {
+    const opts = { hostname: 'localhost', port: 5678, path, method: 'GET',
+      headers: { 'Content-Type': 'application/json', ...headers } };
+    const req = http.request(opts, res => {
+      let raw = ''; res.on('data', c => raw += c);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(raw); } });
+    });
+    req.on('error', reject); req.end();
+  });
+}
 
-// ── pipeline ──────────────────────────────────────────────────────────────────
-if (cwdHash) {
-  if (!sd.pipelines) sd.pipelines = {};
-  const prev = sd.pipelines[cwdHash] || { sa: false, ux: false, fe: false };
-  const upd  = { sa: prev.sa, ux: prev.ux, fe: prev.fe };
+function httpPost(path, body, headers) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const opts = { hostname: 'localhost', port: 5678, path, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data), ...headers } };
+    const req = http.request(opts, res => {
+      let raw = ''; res.on('data', c => raw += c);
+      res.on('end', () => { try { resolve(JSON.parse(raw)); } catch { resolve(raw); } });
+    });
+    req.on('error', reject); req.write(data); req.end();
+  });
+}
+
+function enc(obj) { return encodeURIComponent(JSON.stringify(obj)); }
+
+const AUTH  = { 'X-N8N-API-KEY': apiKey };
+const body  = $input.first().json.body || $input.first().json;
+const cwdHash     = body.cwd_hash   || '';
+const lastSkill   = (body.last_skill || '').toLowerCase();
+const stopType    = (body.stop_type  || 'success').toLowerCase();
+const phases      = (body.checkpoint_phases || []).map(p => p.toLowerCase());
+const memFiles    = parseInt(body.mem_files  || 0, 10);
+const memBytes    = parseInt(body.mem_bytes  || 0, 10);
+const modifiedFiles = JSON.stringify(body.modified_files || []);
+const verifyResult  = (body.verify_result || '').slice(0, 200);
+const debugResult   = (body.debug_result  || '').slice(0, 200);
+const projectName = (body.cwd || '').split('/').filter(Boolean).pop() || cwdHash;
+const now = new Date().toISOString();
+
+async function upsert(filterObj, data) {
+  return httpPost(`/api/v1/data-tables/${PS_TBL}/rows/upsert`,
+    { filter: filterObj, data, returnData: false }, AUTH);
+}
+
+// ── pipeline (skip on failure) ────────────────────────────────────────────────
+if (cwdHash && stopType !== 'failure') {
+  const filter = enc({ type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: cwdHash }] });
+  const d = await httpGet(`/api/v1/data-tables/${PS_TBL}/rows?filter=${filter}`, AUTH);
+  const rows = d.data || [];
+  const prev = rows.length > 0 ? { sa: rows[0].sa, ux: rows[0].ux, fe: rows[0].fe } : { sa: false, ux: false, fe: false };
+  const upd = { ...prev };
   if (lastSkill === 'sa') upd.sa = true;
   if (lastSkill === 'ux') upd.ux = true;
   if (lastSkill === 'fe') upd.fe = true;
@@ -480,54 +642,61 @@ if (cwdHash) {
     if (p === 'ux') upd.ux = true;
     if (p === 'fe') upd.fe = true;
   }
-  if (upd.sa && upd.ux && upd.fe) { delete sd.pipelines[cwdHash]; }
-  else { sd.pipelines[cwdHash] = upd; }
+  if (upd.sa && upd.ux && upd.fe) { upd.sa = false; upd.ux = false; upd.fe = false; }
+  await upsert(
+    { type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: cwdHash }] },
+    { cwd_hash: cwdHash, project_name: projectName, ...upd, modified_files: modifiedFiles, updated_at: now }
+  );
 }
 
-// ── memory alert ──────────────────────────────────────────────────────────────
+// ── verify / debug result ─────────────────────────────────────────────────────
+if (cwdHash && (verifyResult || debugResult)) {
+  const updateData = { cwd_hash: cwdHash, project_name: projectName, updated_at: now };
+  if (verifyResult) updateData.verify_result = verifyResult;
+  if (debugResult)  updateData.debug_result  = debugResult;
+  await upsert(
+    { type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: cwdHash }] },
+    updateData
+  );
+}
+
+// ── global: memory alert ──────────────────────────────────────────────────────
 if (memBytes > 0 || memFiles > 0) {
   const kb = memBytes / 1024;
-  if (kb > 500 || memFiles > 45) {
-    sd.memAlert = `Memory: ${memFiles} files, ${kb.toFixed(0)} KB — run /distill-memory`;
-  } else if (memFiles > 30) {
-    sd.memAlert = `Memory: ${memFiles} files — consider /distill-memory`;
-  } else {
-    sd.memAlert = null;
-  }
+  let memAlert = '';
+  if (kb > 500 || memFiles > 45) memAlert = `Memory: ${memFiles} files, ${kb.toFixed(0)} KB — run /distill-memory`;
+  else if (memFiles > 30)        memAlert = `Memory: ${memFiles} files — consider /distill-memory`;
+  await upsert(
+    { type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: '__global__' }] },
+    { cwd_hash: '__global__', project_name: '__global__', mem_alert: memAlert, updated_at: now }
+  );
 }
 
-// ── followups (payload from n8n-followups-check.sh) ──────────────────────────
+// ── global: followups ─────────────────────────────────────────────────────────
 if (body.content && body.today) {
   const content = body.content;
-  const today = new Date(body.today);
-  today.setHours(0, 0, 0, 0);
-  const pats = [
-    /Review target:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g,
-    /next:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g,
-  ];
+  const today   = new Date(body.today); today.setHours(0, 0, 0, 0);
+  const pats    = [/Review target:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g, /next:\s+\*\*(\d{4}-\d{2}-\d{2})\*\*/g];
   const pending = [];
   for (const re of pats) {
     let m;
     while ((m = re.exec(content)) !== null) {
-      const t = new Date(m[1]);
-      t.setHours(0, 0, 0, 0);
+      const t = new Date(m[1]); t.setHours(0, 0, 0, 0);
       const days = Math.round((t - today) / 86400000);
       if (days < 0 || days > 3) continue;
       const before = content.substring(Math.max(0, m.index - 300), m.index);
       const h = before.match(/##\s+\d+\.\s+(.+)/g);
       const title = h ? h[h.length - 1].replace(/^##\s+\d+\.\s+/, '') : 'Task';
-      pending.push({ title, date: m[1], days });
+      pending.push({ title, days });
     }
   }
-  if (pending.length > 0) {
-    const lines = pending.map(p => {
-      const w = p.days === 0 ? 'TODAY' : p.days === 1 ? 'tmr' : `${p.days}d`;
-      return `${p.title} (${w})`;
-    });
-    sd.pendingFollowups = `FOLLOWUPS: ${lines.join(', ')}`;
-  } else {
-    sd.pendingFollowups = null;
-  }
+  const followupsText = pending.length > 0
+    ? `FOLLOWUPS: ${pending.map(p => { const w = p.days === 0 ? 'TODAY' : p.days === 1 ? 'tmr' : `${p.days}d`; return `${p.title} (${w})`; }).join(', ')}`
+    : '';
+  await upsert(
+    { type: 'and', filters: [{ columnName: 'cwd_hash', condition: 'eq', value: '__global__' }] },
+    { cwd_hash: '__global__', project_name: '__global__', followups_text: followupsText, updated_at: now }
+  );
 }
 
 return [{ json: { ok: true } }];
@@ -543,10 +712,10 @@ wh_post = {"id": uid(), "name": "WH POST", "type": "n8n-nodes-base.webhook",
                            "responseMode": "onReceived", "options": {}}}
 code_r  = {"id": uid(), "name": "Read State",  "type": "n8n-nodes-base.code",
             "typeVersion": 2, "position": [460, 200],
-            "parameters": {"jsCode": js8_read}}
+            "parameters": {"jsCode": js8_read.replace('__PS_TBL__', PS_TBL)}}
 code_w  = {"id": uid(), "name": "Write State", "type": "n8n-nodes-base.code",
             "typeVersion": 2, "position": [460, 500],
-            "parameters": {"jsCode": js8_write}}
+            "parameters": {"jsCode": js8_write.replace('__PS_TBL__', PS_TBL)}}
 respond = {"id": uid(), "name": "Respond",     "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.1, "position": [680, 200],
             "parameters": {"respondWith": "json",

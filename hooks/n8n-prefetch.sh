@@ -26,17 +26,49 @@ HAS=$(echo "$RESPONSE" | python3 -c \
 
 CTX=$(echo "$RESPONSE" | python3 -c "
 import json, sys, re
+
+def clean(s):
+    return re.sub(r'[\x00-\x1f\x7f\x80-\x9f​-‏‪-‮⁠-⁤﻿]', ' ', str(s)[:200]).strip()
+
 d = json.load(sys.stdin)
-lines = d.get('items', [])
-safe = []
-for l in lines[:10]:
-    # Strip ASCII controls, C1 block, Unicode invisible/directional override chars
-    l = re.sub(r'[\x00-\x1f\x7f\x80-\x9f​-‏‪-‮⁠-⁤﻿]', ' ', str(l)[:200]).strip()
-    if l:
-        safe.append(f'• {l}')
-if not safe:
+sections = []
+
+# Pipeline section — formatted prominently if any phase is in progress
+pipeline = d.get('pipeline', {})
+if pipeline.get('sa') or pipeline.get('ux') or pipeline.get('fe'):
+    sa = '✅' if pipeline.get('sa') else '⏳'
+    ux = '✅' if pipeline.get('ux') else '⏳'
+    fe = '✅' if pipeline.get('fe') else '⏳'
+    sections.append(f'Pipeline: sa {sa} → ux {ux} → fe {fe}')
+
+# Alerts section — memory + type check errors
+for alert in (d.get('alerts') or []):
+    a = clean(alert)
+    if a:
+        sections.append(f'⚠ {a}')
+
+# Followups
+for f in (d.get('followups') or []):
+    v = clean(f)
+    if v:
+        sections.append(v)
+
+# Last verify / debug outcomes
+if d.get('verify'):
+    sections.append(f'Last verify: {clean(d[\"verify\"])}')
+if d.get('debug'):
+    sections.append(f'Last debug: {clean(d[\"debug\"])}')
+
+# Modified files from last session
+mf = d.get('modified_files') or []
+if mf:
+    shown = ', '.join(mf[:5])
+    extra = f' +{len(mf)-5} more' if len(mf) > 5 else ''
+    sections.append(f'Modified last session: {shown}{extra}')
+
+if not sections:
     sys.exit(0)
-print('\n'.join(safe)[:500])
+print('\n'.join(sections)[:600])
 " 2>/dev/null)
 [ -z "$CTX" ] && exit 0
 

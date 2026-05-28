@@ -43,14 +43,18 @@ if [ -d "$PROJECT_MEM" ]; then
   CHECKPOINT_PHASES="${PHASES:-[]}"
 fi
 
-# Fix 3: read verify/debug result markers written by skill
+# Fix 3: one-shot read of verify/debug result markers — delete after reading (no stale data)
 VERIFY_RESULT=""
 DEBUG_RESULT=""
 if [ "$LAST_SKILL" = "VERIFY" ] && [ -n "$CWD_HASH" ]; then
-  VERIFY_RESULT=$(cat "/tmp/.claude-verify-${CWD_HASH}" 2>/dev/null | head -1 | tr -d '\n' || echo "")
+  MARKER="/tmp/.claude-verify-${CWD_HASH}"
+  VERIFY_RESULT=$(cat "$MARKER" 2>/dev/null | head -1 | tr -d '\n' || echo "")
+  rm -f "$MARKER" 2>/dev/null
 fi
 if [ "$LAST_SKILL" = "DEBUG" ] && [ -n "$CWD_HASH" ]; then
-  DEBUG_RESULT=$(cat "/tmp/.claude-debug-${CWD_HASH}" 2>/dev/null | head -2 | tr '\n' ' ' | cut -c1-200 || echo "")
+  MARKER="/tmp/.claude-debug-${CWD_HASH}"
+  DEBUG_RESULT=$(cat "$MARKER" 2>/dev/null | head -2 | tr '\n' ' ' | cut -c1-200 || echo "")
+  rm -f "$MARKER" 2>/dev/null
 fi
 
 # Fix 5: recently modified files (last git diff vs HEAD)
