@@ -14,9 +14,10 @@ Thresholds:
 """
 import json
 import os
+import re
 import sys
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -32,6 +33,7 @@ LOG_DIR = Path.home() / ".claude" / "logs"
 SKILLS_DIR = Path.home() / ".claude" / "skills"
 SKILL_WARN_LINES = 150
 SKILL_CRITICAL_LINES = 200
+SKILL_AUTO_TRIM_TARGET = 140  # trim to this after auto-prune (buffer below WARN)
 
 
 def count_entries(memory_dir: Path) -> int:
@@ -112,33 +114,138 @@ def stale_pipeline_warning(directory: Path) -> Optional[str]:
     )
 
 
+def _parse_skill_entries(text: str):
+    """Split learnings.md into (header_text, [(heading, body), ...]).
+    Header = everything up to and including '## Entries'.
+    Returns (None, []) if the expected structure is not found.
+    """
+    lines = text.split("\n")
+    entries_line = next(
+        (i for i, l in enumerate(lines) if l.strip() == "## Entries"), None
+    )
+    if entries_line is None:
+        return None, []
+
+    header = "\n".join(lines[: entries_line + 1])
+
+    # Collect inter-header comment/blank lines before first entry
+    preamble_end = entries_line + 1
+    while preamble_end < len(lines) and not lines[preamble_end].startswith("## "):
+        preamble_end += 1
+    inter = "\n".join(lines[entries_line + 1 : preamble_end])  # e.g. "<!-- newest on top -->"
+
+    entries: list[tuple[str, str]] = []
+    cur_heading: Optional[str] = None
+    cur_body: list[str] = []
+    for line in lines[preamble_end:]:
+        if line.startswith("## "):
+            if cur_heading is not None:
+                entries.append((cur_heading, "\n".join(cur_body)))
+            cur_heading = line
+            cur_body = []
+        else:
+            cur_body.append(line)
+    if cur_heading is not None:
+        entries.append((cur_heading, "\n".join(cur_body)))
+
+    return (header, inter), entries
+
+
+def _entry_date(body: str) -> str:
+    m = re.search(r"\*\*Date:\*\*\s*(\d{4}-\d{2}-\d{2})", body)
+    return m.group(1) if m else "0000-00-00"
+
+
+def auto_trim_skill_learnings(f: Path, skill: str) -> Optional[str]:
+    """Remove oldest entries until line count ≤ SKILL_AUTO_TRIM_TARGET.
+    Writes a dated backup before modifying. Returns a status string or None on failure.
+    """
+    try:
+        text = f.read_text(encoding="utf-8", errors="ignore")
+        header_tuple, entries = _parse_skill_entries(text)
+        if header_tuple is None or not entries:
+            return None  # unparseable — don't touch
+
+        header, inter = header_tuple
+
+        # Sort oldest-first for removal (preserve newest)
+        dated = sorted(entries, key=lambda e: _entry_date(e[1]))
+
+        def rebuild(ents):
+            body = "\n\n".join(f"{h}\n{b}".rstrip() for h, b in ents)
+            sep = f"\n{inter}\n\n" if inter.strip() else "\n\n"
+            return header + sep + body + "\n"
+
+        removed: list[tuple[str, str]] = []
+        remaining = list(entries)  # original order (newest first)
+
+        while len(rebuild(remaining).split("\n")) > SKILL_AUTO_TRIM_TARGET:
+            if len(remaining) <= 1:
+                break
+            # Remove the oldest entry
+            oldest = dated.pop(0)
+            removed.append(oldest)
+            remaining = [e for e in remaining if e[0] != oldest[0]]
+
+        if not removed:
+            return None
+
+        # Write backup
+        today_str = date.today().isoformat()
+        backup = f.parent / f"learnings.trimmed.{today_str}.md"
+        backup_content = (
+            f"# Auto-trimmed entries from `{skill}` — {today_str}\n\n"
+            + "\n\n".join(f"{h}\n{b}".rstrip() for h, b in removed)
+            + "\n"
+        )
+        backup.write_text(backup_content, encoding="utf-8")
+
+        # Write trimmed file
+        f.write_text(rebuild(remaining), encoding="utf-8")
+
+        new_lines = len(rebuild(remaining).split("\n"))
+        return (
+            f"auto-trimmed {len(removed)} oldest entries → {new_lines} lines "
+            f"(backup: `{backup.name}`)"
+        )
+    except Exception:
+        return None
+
+
 def check_skill_learnings() -> Optional[str]:
-    """Warn when any skill's learnings.md exceeds line thresholds."""
+    """Warn when any skill's learnings.md exceeds line thresholds.
+    Auto-trims skills at CRITICAL by removing oldest entries (backup written first).
+    """
     if not SKILLS_DIR.exists():
         return None
-    critical, warn = [], []
+    trimmed_msgs, critical, warn = [], [], []
     for f in sorted(SKILLS_DIR.glob("*/learnings.md")):
         try:
             lines = len(f.read_text(encoding="utf-8", errors="ignore").splitlines())
             skill = f.parent.name
             if lines >= SKILL_CRITICAL_LINES:
-                critical.append(f"`{skill}` ({lines} lines)")
+                result = auto_trim_skill_learnings(f, skill)
+                if result:
+                    trimmed_msgs.append(f"`{skill}`: {result}")
+                else:
+                    critical.append(f"`{skill}` ({lines} lines)")
             elif lines >= SKILL_WARN_LINES:
                 warn.append(f"`{skill}` ({lines} lines)")
         except Exception:
             pass
     parts = []
+    if trimmed_msgs:
+        parts.append(f"✂️ auto-trimmed: {'; '.join(trimmed_msgs)}")
     if critical:
-        parts.append(f"🔴 critical (≥{SKILL_CRITICAL_LINES}): {', '.join(critical)}")
+        parts.append(f"🔴 critical (≥{SKILL_CRITICAL_LINES}, could not auto-trim): {', '.join(critical)}")
     if warn:
         parts.append(f"🟡 warn (≥{SKILL_WARN_LINES}): {', '.join(warn)}")
     if not parts:
         return None
-    return (
-        f"📚 **Skill learnings oversized** — {'; '.join(parts)}. "
-        f"Large learnings.md files load fully on every skill invoke and consume context. "
-        f"Run `/distill-memory` to prune stale entries."
-    )
+    base = f"📚 **Skill learnings** — {'; '.join(parts)}."
+    if warn or critical:
+        base += " Large learnings.md files load fully on every skill invoke. Run `/distill-memory` to review."
+    return base
 
 
 def distill_idle_warning(global_count: int, project_count: int) -> Optional[str]:
