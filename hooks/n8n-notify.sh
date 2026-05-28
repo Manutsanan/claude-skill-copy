@@ -57,6 +57,13 @@ if [ "$LAST_SKILL" = "DEBUG" ] && [ -n "$CWD_HASH" ]; then
   rm -f "$MARKER" 2>/dev/null
 fi
 
+# Followups: read FOLLOWUPS.md → State Store will recompute followups_text on every session end
+FOLLOWUPS_CONTENT=""
+FOLLOWUPS_TODAY=$(date +%Y-%m-%d)
+FOLLOWUPS_FILE="${CWD_PATH}/FOLLOWUPS.md"
+[ -f "$FOLLOWUPS_FILE" ] || FOLLOWUPS_FILE="$HOME/Project/claude-skill-copy/FOLLOWUPS.md"
+[ -f "$FOLLOWUPS_FILE" ] && FOLLOWUPS_CONTENT=$(head -200 "$FOLLOWUPS_FILE" 2>/dev/null | tr -d '\r' || echo "")
+
 # Fix 5: recently modified files (last git diff vs HEAD)
 MODIFIED_FILES="[]"
 if [ -n "$CWD_PATH" ] && git -C "$CWD_PATH" rev-parse --git-dir >/dev/null 2>&1; then
@@ -77,6 +84,8 @@ PAYLOAD=$(echo "$INPUT" | jq \
   --arg stop_type "$STOP_TYPE" \
   --arg verify_result "$VERIFY_RESULT" \
   --arg debug_result "$DEBUG_RESULT" \
+  --arg content "$FOLLOWUPS_CONTENT" \
+  --arg today "$FOLLOWUPS_TODAY" \
   --argjson checkpoint_phases "$CHECKPOINT_PHASES" \
   --argjson mem_files "${MEM_FILES:-0}" \
   --argjson mem_bytes "${MEM_BYTES:-0}" \
@@ -89,6 +98,8 @@ PAYLOAD=$(echo "$INPUT" | jq \
     stop_type: $stop_type,
     verify_result: $verify_result,
     debug_result: $debug_result,
+    content: $content,
+    today: $today,
     checkpoint_phases: $checkpoint_phases,
     mem_files: $mem_files,
     mem_bytes: $mem_bytes,
