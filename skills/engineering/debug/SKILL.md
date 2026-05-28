@@ -304,6 +304,16 @@ Always scan both single + double quotes; if other sites are found → fix all or
 
 ---
 
+## Write debug result marker
+
+After confirming root cause and fix — run so n8n can surface the outcome in next session:
+```bash
+CWD_HASH=$(python3 -c "import hashlib,os; print(hashlib.sha256(os.getcwd().encode()).hexdigest()[:16])")
+echo "ROOT_CAUSE: <one-line summary>" > "/tmp/.claude-debug-${CWD_HASH}"
+```
+
+---
+
 ## Quality gates (before closing)
 
 - [ ] **Mantra recited** verbatim (or user said skip)

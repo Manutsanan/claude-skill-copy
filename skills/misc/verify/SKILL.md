@@ -82,6 +82,15 @@ If anything fails → yield to `fe` (logic bug) or `debug` (runtime error) with:
 - Console error text (if any)
 - Reproduce steps (route → action → observe)
 
+5. **Write result marker** — run after report so n8n can surface the outcome:
+   ```bash
+   CWD_HASH=$(python3 -c "import hashlib,os; print(hashlib.sha256(os.getcwd().encode()).hexdigest()[:16])")
+   # Pass:
+   echo "PASS" > "/tmp/.claude-verify-${CWD_HASH}"
+   # Fail (replace with actual reason):
+   echo "FAIL: <short reason>" > "/tmp/.claude-verify-${CWD_HASH}"
+   ```
+
 ---
 
 ## Quality gates

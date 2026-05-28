@@ -1,0 +1,228 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "model": "claude-sonnet-4-6",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/rtk-rewrite.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/log-skill-invoke.py"
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/lint-on-edit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/skill-vocab-sync.py",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/git-init-check.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/check-cross-project.py",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "[ ! -f .codegraph/codegraph.db ] && { [ -f package.json ] || [ -f pyproject.toml ] || [ -f go.mod ] || [ -f Cargo.toml ] || [ -f Gemfile ] || [ -f pom.xml ] || [ -f setup.py ]; } && codegraph init -i . 2>&1 | tail -2 || true",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/check-memory-size.py",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/post-compact.py"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/cmux-working.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/inject-checkpoint.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/n8n-prefetch.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/manutsanan/.claude/hooks/log-user-prompt.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/cmux-done.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/n8n-notify.sh",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/quality-gate.sh",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/cmux-error.sh",
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/manutsanan/.claude/hooks/n8n-notify.sh --failure",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -x '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh' ]; then /bin/sh '/Users/manutsanan/.orca/agent-hooks/claude-hook.sh'; fi"
+          }
+        ]
+      }
+    ]
+  },
+  "effortLevel": "high",
+  "advisorModel": "opus",
+  "fastMode": true,
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
+  "agentPushNotifEnabled": true
+}
